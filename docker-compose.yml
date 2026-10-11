@@ -37,6 +37,16 @@ services:
       - telemetry_net
       - frontend_net
 
+  frontend:
+    build: ./frontend
+    environment:
+      VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
+      VITE_OPERATOR_TOKEN: ${VITE_OPERATOR_TOKEN:-change-me-dev-token}
+    ports:
+      - "${HOST_BIND:-127.0.0.1}:5173:5173"
+    networks:
+      - frontend_net
+
 networks:
   frontend_net: {} # host-facing (default bridge semantics)
   control_net:
