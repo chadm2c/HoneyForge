@@ -11,3 +11,4 @@ agent/spool/
 *.key
 nginx/certs/*.crt
 docs/superpowers/
+.superpowers/
