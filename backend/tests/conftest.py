@@ -3,18 +3,12 @@ from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
 
+from app.core.security import generate_agent_token, hash_agent_token
 from app.db.base import Base
 from app.core.config import settings
+from app.db.session import get_db
 from app.main import create_app
-
-
-@pytest.fixture
-def client():
-    return TestClient(create_app())
-
-
-def auth(token: str) -> dict[str, str]:
-    return {"Authorization": f"Bearer {token}"}
+from app.models import Honeypot, Profile
 
 
 @pytest.fixture(scope="session")
@@ -28,6 +22,21 @@ def engine():
 
 @pytest.fixture
 def db(engine):
+    yield from _session(engine)
+
+
+@pytest.fixture
+def client(engine):
+    app = create_app()
+
+    def _override_get_db():
+        yield from _session(engine)
+
+    app.dependency_overrides[get_db] = _override_get_db
+    return TestClient(app)
+
+
+def _session(engine):
     TestingSession = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
     s = TestingSession()
     try:
@@ -38,3 +47,40 @@ def db(engine):
             s.execute(table.delete())
         s.commit()
         s.close()
+
+
+def auth(token: str) -> dict[str, str]:
+    return {"Authorization": f"Bearer {token}"}
+
+
+@pytest.fixture
+def honeypot_factory(db):
+    def make(interaction_level="low", config=None, name="hp"):
+        profile = Profile(
+            name=name,
+            interaction_level=interaction_level,
+            config=config or {"ports": [2222], "banner": "SSH-2.0-x"},
+            version=1,
+        )
+        db.add(profile)
+        db.flush()
+        token = generate_agent_token()
+        hp = Honeypot(
+            name=name,
+            profile_id=profile.id,
+            agent_token_hash=hash_agent_token(token),
+            config_version=0,
+        )
+        db.add(hp)
+        db.commit()
+        return hp, token
+
+    yield make
+
+
+@pytest.fixture
+def profile(db):
+    p = Profile(name="low-profile", interaction_level="low", config={"ports": [2222]}, version=1)
+    db.add(p)
+    db.commit()
+    return p
