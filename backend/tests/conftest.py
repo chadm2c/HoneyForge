@@ -4,6 +4,7 @@ from datetime import datetime, timezone
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
+from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
 from app.core.security import generate_agent_token, hash_agent_token
@@ -16,11 +17,35 @@ from app.models import AttackEvent, Honeypot, Profile
 
 @pytest.fixture(scope="session")
 def engine():
+    _ensure_test_database()
     eng = create_engine(settings.test_database_url)
     Base.metadata.drop_all(eng)
     Base.metadata.create_all(eng)
     yield eng
     eng.dispose()
+
+
+def _ensure_test_database() -> None:
+    """Create the test database if it doesn't exist.
+
+    ``create_all`` can create tables but not the database itself, so on a fresh
+    Compose stack (or a bare local Postgres) the very first test run needs this.
+    Connects to the server's default ``postgres`` database to issue the CREATE.
+    """
+    url = make_url(settings.test_database_url)
+    db_name = url.database
+    if not db_name:
+        return
+    admin_engine = create_engine(url.set(database="postgres"), isolation_level="AUTOCOMMIT")
+    try:
+        with admin_engine.connect() as conn:
+            exists = conn.exec_driver_sql(
+                "SELECT 1 FROM pg_database WHERE datname = %s", (db_name,)
+            ).scalar()
+            if not exists:
+                conn.exec_driver_sql(f'CREATE DATABASE "{db_name}"')
+    finally:
+        admin_engine.dispose()
 
 
 @pytest.fixture
