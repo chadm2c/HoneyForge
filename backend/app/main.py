@@ -3,6 +3,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.agent import router as agent_router
 from app.api.deps import require_operator
+from app.api.events import router as events_router
 from app.api.telemetry import router as telemetry_router
 from app.core.config import settings
 
@@ -19,6 +20,7 @@ def create_app() -> FastAPI:
 
     app.include_router(agent_router)
     app.include_router(telemetry_router)
+    app.include_router(events_router)
 
     @app.get("/health")
     def health() -> dict[str, str]:

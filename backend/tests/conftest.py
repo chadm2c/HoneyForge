@@ -11,7 +11,7 @@ from app.db.base import Base
 from app.core.config import settings
 from app.db.session import get_db
 from app.main import create_app
-from app.models import Honeypot, Profile
+from app.models import AttackEvent, Honeypot, Profile
 
 
 @pytest.fixture(scope="session")
@@ -119,3 +119,40 @@ def make_event():
         return e
 
     return make
+
+
+@pytest.fixture
+def seed_events(honeypot_factory, db):
+    a, _ = honeypot_factory(name="seed-a")
+    b, _ = honeypot_factory(name="seed-b")
+    events = [
+        AttackEvent(
+            id=uuid.uuid4(),
+            honeypot_id=a.id,
+            event_type="connection",
+            source_ip="192.0.2.1",
+            source_port=40000 + i,
+            target_port=2222,
+            protocol="tcp",
+            details={"user": "root"} if i else {},
+            occurred_at=datetime(2026, 1, 1, 12, 0, i, tzinfo=timezone.utc),
+        )
+        for i in range(3)
+    ]
+    events += [
+        AttackEvent(
+            id=uuid.uuid4(),
+            honeypot_id=b.id,
+            event_type="scan",
+            source_ip="198.51.100.9",
+            source_port=40000 + i,
+            target_port=22,
+            protocol="tcp",
+            details={},
+            occurred_at=datetime(2026, 1, 1, 12, 1, i, tzinfo=timezone.utc),
+        )
+        for i in range(2)
+    ]
+    db.add_all(events)
+    db.commit()
+    return {"a": str(a.id), "b": str(b.id)}

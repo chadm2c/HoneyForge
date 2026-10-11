@@ -1,4 +1,5 @@
 import uuid
+from datetime import datetime
 
 import sqlalchemy as sa
 from pydantic import BaseModel
@@ -12,6 +13,14 @@ from app.schemas.telemetry import TelemetryEventIn
 class IngestResult(BaseModel):
     accepted: list[uuid.UUID]
     duplicates: list[uuid.UUID]
+
+
+class EventFilters(BaseModel):
+    honeypot_id: uuid.UUID | None = None
+    event_type: str | None = None
+    source_ip: str | None = None
+    since: datetime | None = None
+    until: datetime | None = None
 
 
 def ingest_events(
@@ -52,3 +61,36 @@ def ingest_events(
     accepted = [ev.id for ev in events if ev.id in inserted_set]
     duplicates = [ev.id for ev in events if ev.id not in inserted_set]
     return IngestResult(accepted=accepted, duplicates=duplicates)
+
+
+def list_events(
+    db: Session,
+    filters: EventFilters,
+    limit: int = 50,
+    offset: int = 0,
+) -> tuple[list[AttackEvent], int]:
+    """Newest-first page of events matching the filters, plus the total count."""
+    conds = []
+    if filters.honeypot_id:
+        conds.append(AttackEvent.honeypot_id == filters.honeypot_id)
+    if filters.event_type:
+        conds.append(AttackEvent.event_type == filters.event_type)
+    if filters.source_ip:
+        conds.append(AttackEvent.source_ip == filters.source_ip)
+    if filters.since:
+        conds.append(AttackEvent.occurred_at >= filters.since)
+    if filters.until:
+        conds.append(AttackEvent.occurred_at <= filters.until)
+
+    total = db.execute(
+        sa.select(sa.func.count()).select_from(AttackEvent).where(*conds)
+    ).scalar_one()
+    stmt = (
+        sa.select(AttackEvent)
+        .where(*conds)
+        .order_by(AttackEvent.occurred_at.desc(), AttackEvent.id.desc())
+        .limit(limit)
+        .offset(offset)
+    )
+    items = list(db.execute(stmt).scalars())
+    return items, total
