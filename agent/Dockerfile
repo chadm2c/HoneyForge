@@ -9,6 +9,7 @@ COPY . .
 
 ENV HF_SPOOL_PATH=/data/agent-spool.jsonl
 VOLUME /data
-EXPOSE 8000
+# Internal ingest API (agent_decoy_net only; never published to the host).
+EXPOSE 9000
 
 CMD ["python", "-m", "agent"]

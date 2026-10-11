@@ -8,6 +8,8 @@ durable buffer. This is deliberately NOT exposed on the attacker-facing
 
 import hmac
 import json
+import uuid
+from datetime import datetime
 
 from fastapi import FastAPI, Header, HTTPException, Request
 
@@ -15,6 +17,8 @@ from event_buffer import EventBuffer
 
 INGEST_SECRET_HEADER = "X-Agent-Ingest-Secret"
 MAX_DETAILS_BYTES = 65_536
+MAX_EVENT_TYPE = 64
+MAX_PROTOCOL = 16
 
 
 class AppliedConfig:
@@ -35,19 +39,54 @@ class AppliedConfig:
 
 
 def _validate_event(ev) -> None:
+    """Mirror the control center's TelemetryEventIn constraints.
+
+    Anything accepted here must also be accepted by the center: the agent's
+    drainer retries a rejected batch forever, so a field the center would 422
+    must be refused at the door rather than let into the spool (Review Focus:
+    poisoning the buffer would wedge telemetry permanently).
+    """
     if not isinstance(ev, dict):
         raise HTTPException(status_code=422, detail="event must be an object")
-    for field in ("id", "event_type", "protocol", "occurred_at"):
-        if field not in ev or not isinstance(ev[field], str):
-            raise HTTPException(status_code=422, detail=f"missing or invalid field: {field}")
+
+    # id -> the center's idempotency key is uuid.UUID
+    try:
+        uuid.UUID(str(ev.get("id", "")))
+    except (ValueError, TypeError, AttributeError):
+        raise HTTPException(status_code=422, detail="id must be a UUID") from None
+
+    # occurred_at -> the center parses it as a datetime
+    occurred_at = ev.get("occurred_at")
+    if not isinstance(occurred_at, str):
+        raise HTTPException(status_code=422, detail="occurred_at must be an ISO-8601 string")
+    try:
+        datetime.fromisoformat(occurred_at.replace("Z", "+00:00"))
+    except ValueError:
+        raise HTTPException(status_code=422, detail="occurred_at must be an ISO-8601 string") from None
+
+    for field, cap in (("event_type", MAX_EVENT_TYPE), ("protocol", MAX_PROTOCOL)):
+        value = ev.get(field)
+        if not isinstance(value, str) or not value or len(value) > cap:
+            raise HTTPException(
+                status_code=422, detail=f"{field} must be a string of 1..{cap} chars"
+            )
+
+    source_ip = ev.get("source_ip")
+    if source_ip is not None and not isinstance(source_ip, str):
+        raise HTTPException(status_code=422, detail="source_ip must be a string")
+
     details = ev.get("details", {})
     if not isinstance(details, dict):
         raise HTTPException(status_code=422, detail="details must be an object")
     if len(json.dumps(details)) > MAX_DETAILS_BYTES:
         raise HTTPException(status_code=422, detail="details too large (max 64KB)")
+
     for field in ("source_port", "target_port"):
-        if field in ev and ev[field] is not None and not isinstance(ev[field], int):
-            raise HTTPException(status_code=422, detail=f"{field} must be an integer")
+        value = ev.get(field)
+        if value is not None and (not isinstance(value, int) or not 1 <= value <= 65535):
+            raise HTTPException(
+                status_code=422, detail=f"{field} must be an integer in 1..65535"
+            )
 
 
 def create_ingest_app(

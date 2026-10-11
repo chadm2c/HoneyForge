@@ -40,3 +40,13 @@ def test_ws_rejects_bad_token(client):
             ws.send_json({"type": "auth", "token": "nope"})
             ws.receive_json()
     assert exc.value.code == 1008
+
+
+def test_ws_rejects_non_string_token(client):
+    # A non-str token must close cleanly (1008), not blow up the handler
+    # (hmac.compare_digest raises TypeError on mismatched types).
+    with pytest.raises(WebSocketDisconnect) as exc:
+        with client.websocket_connect("/api/ws/events") as ws:
+            ws.send_json({"type": "auth", "token": 12345})
+            ws.receive_json()
+    assert exc.value.code == 1008

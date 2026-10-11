@@ -46,3 +46,18 @@ def test_send_posts_events_payload_and_parses_ack(httpx_mock):
 def test_empty_spool_drains_to_nothing(httpx_mock, tmp_path):
     buf = EventBuffer(tmp_path / "s.jsonl")
     assert Drainer(_client(), buf).drain_once() is None
+
+
+def test_send_logs_permanent_4xx_but_still_retries(httpx_mock, caplog, tmp_path):
+    import logging
+
+    # First attempt: the center rejects the batch (would wedge if unknown).
+    httpx_mock.add_response(status_code=422, json={"detail": "bad event"})
+    # Second attempt: succeeds, so the drainer must complete.
+    httpx_mock.add_response(json={"accepted": ["1"], "duplicates": []})
+    buf = EventBuffer(tmp_path / "s.jsonl")
+    buf.append({"id": "1"})
+    with caplog.at_level(logging.WARNING):
+        Drainer(_client(), buf).drain_once()
+    assert any("422" in r.getMessage() for r in caplog.records)
+    assert buf.pending() == 0

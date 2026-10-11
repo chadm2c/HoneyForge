@@ -21,7 +21,16 @@ export function useEventStream(): { events: AttackEvent[]; connected: boolean } 
       const res = await apiFetch("/api/events?limit=100");
       if (!res.ok) return;
       const page = (await res.json()) as { items: AttackEvent[] };
-      setEvents(page.items ?? []);
+      // Merge (don't replace): a live event may have arrived while the fetch was
+      // in flight, and it must not be momentarily dropped. Dedupe by id.
+      setEvents((prev) => {
+        const byId = new Map<string, AttackEvent>();
+        for (const e of page.items ?? []) byId.set(e.id, e);
+        for (const e of prev) if (!byId.has(e.id)) byId.set(e.id, e);
+        return [...byId.values()].sort(
+          (a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at)
+        );
+      });
     } catch {
       // History fetch is best-effort; the socket keeps running and will refetch.
     }

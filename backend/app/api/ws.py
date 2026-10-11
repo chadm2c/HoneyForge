@@ -20,11 +20,12 @@ async def ws_events(websocket: WebSocket) -> None:
     except Exception:
         await websocket.close(code=1008)
         return
-    token = first.get("token", "") if isinstance(first, dict) else ""
+    raw_token = first.get("token") if isinstance(first, dict) else None
     authed = (
         isinstance(first, dict)
         and first.get("type") == "auth"
-        and hmac.compare_digest(token, settings.dev_operator_token)
+        and isinstance(raw_token, str)
+        and hmac.compare_digest(raw_token, settings.dev_operator_token)
     )
     if not authed:
         await websocket.close(code=1008)

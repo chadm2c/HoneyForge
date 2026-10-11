@@ -12,7 +12,7 @@ AUTH = {"X-Agent-Ingest-Secret": INGEST_SECRET}
 
 def _event(**overrides):
     ev = {
-        "id": "abc",
+        "id": "00000000-0000-4000-8000-000000000001",
         "event_type": "connection",
         "protocol": "tcp",
         "details": {},
@@ -42,6 +42,40 @@ def test_ingest_rejects_malformed_event(tmp_path):
     buf = EventBuffer(tmp_path / "s.jsonl")
     c = TestClient(create_ingest_app(buf, ingest_secret=INGEST_SECRET))
     r = c.post("/ingest", json=_event(id=None), headers=AUTH)
+    assert r.status_code == 422
+    assert buf.pending() == 0
+
+
+def test_ingest_rejects_non_uuid_id(tmp_path):
+    # The center's idempotency key is a UUID; a non-UUID here would be accepted
+    # into the spool and then 422 forever, wedging the drain loop.
+    buf = EventBuffer(tmp_path / "s.jsonl")
+    c = TestClient(create_ingest_app(buf, ingest_secret=INGEST_SECRET))
+    r = c.post("/ingest", json=_event(id="not-a-uuid"), headers=AUTH)
+    assert r.status_code == 422
+    assert buf.pending() == 0
+
+
+def test_ingest_rejects_bad_timestamp(tmp_path):
+    buf = EventBuffer(tmp_path / "s.jsonl")
+    c = TestClient(create_ingest_app(buf, ingest_secret=INGEST_SECRET))
+    r = c.post("/ingest", json=_event(occurred_at="not-a-date"), headers=AUTH)
+    assert r.status_code == 422
+    assert buf.pending() == 0
+
+
+def test_ingest_rejects_oversized_event_type(tmp_path):
+    buf = EventBuffer(tmp_path / "s.jsonl")
+    c = TestClient(create_ingest_app(buf, ingest_secret=INGEST_SECRET))
+    r = c.post("/ingest", json=_event(event_type="x" * 65), headers=AUTH)
+    assert r.status_code == 422
+    assert buf.pending() == 0
+
+
+def test_ingest_rejects_out_of_range_port(tmp_path):
+    buf = EventBuffer(tmp_path / "s.jsonl")
+    c = TestClient(create_ingest_app(buf, ingest_secret=INGEST_SECRET))
+    r = c.post("/ingest", json=_event(source_port=70000), headers=AUTH)
     assert r.status_code == 422
     assert buf.pending() == 0
 

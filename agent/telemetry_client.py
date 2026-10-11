@@ -6,6 +6,7 @@ bounded exponential backoff + jitter, so a center outage never causes data
 loss — the events simply stay buffered until the channel is back.
 """
 
+import logging
 import time
 from collections.abc import Callable
 from dataclasses import dataclass, field
@@ -14,6 +15,8 @@ import httpx
 
 from config_client import backoff_delay
 from event_buffer import EventBuffer
+
+log = logging.getLogger("honeyforge.agent.telemetry")
 
 
 @dataclass(frozen=True)
@@ -60,6 +63,19 @@ class TelemetryClient:
                     accepted=[str(i) for i in data.get("accepted", [])],
                     duplicates=[str(i) for i in data.get("duplicates", [])],
                 )
+            except httpx.HTTPStatusError as exc:
+                # A 4xx (other than 408/429) is not going to succeed by itself.
+                # We still retry (rule 8: never drop unacknowledged events), but
+                # log it loudly so a wedge is diagnosable instead of silent.
+                code = exc.response.status_code
+                if 400 <= code < 500 and code not in (408, 429):
+                    log.warning(
+                        "center rejected telemetry batch (HTTP %s): %s",
+                        code,
+                        exc.response.text[:500],
+                    )
+                attempt += 1
+                time.sleep(self._delay(attempt))
             except (httpx.HTTPError, KeyError, ValueError, TypeError):
                 attempt += 1
                 time.sleep(self._delay(attempt))
