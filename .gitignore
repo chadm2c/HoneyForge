@@ -5,6 +5,7 @@ __pycache__/
 node_modules/
 dist/
 backend/.coverage
+*.egg-info/
 .pytest_cache/
 agent/spool/
 *.pem

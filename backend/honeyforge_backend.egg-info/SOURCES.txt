@@ -1,9 +1,0 @@
-pyproject.toml
-app/__init__.py
-app/core/__init__.py
-honeyforge_backend.egg-info/PKG-INFO
-honeyforge_backend.egg-info/SOURCES.txt
-honeyforge_backend.egg-info/dependency_links.txt
-honeyforge_backend.egg-info/requires.txt
-honeyforge_backend.egg-info/top_level.txt
-tests/test_health.py
