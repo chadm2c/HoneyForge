@@ -1,3 +1,6 @@
+import uuid
+from datetime import datetime, timezone
+
 import pytest
 from fastapi.testclient import TestClient
 from sqlalchemy import create_engine
@@ -97,3 +100,22 @@ def profile(db):
     db.add(p)
     db.commit()
     return p
+
+
+@pytest.fixture
+def make_event():
+    def make(**overrides):
+        e = {
+            "id": str(uuid.uuid4()),
+            "event_type": "connection",
+            "source_ip": "192.0.2.10",  # TEST-NET-1 documentation range
+            "source_port": 51000,
+            "target_port": 2222,
+            "protocol": "tcp",
+            "details": {},
+            "occurred_at": datetime.now(timezone.utc).isoformat(),
+        }
+        e.update(overrides)
+        return e
+
+    return make
