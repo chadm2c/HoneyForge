@@ -85,10 +85,14 @@ docker compose run --rm agent pytest
 # frontend
 cd frontend && npm run dev
 cd frontend && npm test
+# low decoy (local venv; the decoy image stays lean and has no test deps)
+cd honeypots/low && pytest
 ```
 
-> The skeleton, `docker-compose.yml`, and test harness are created in Slice S1.
-> Until then these commands are the target, not the current state.
+> S1 (skeleton, schema, Compose, test harness) is complete, so these commands
+> run against the current stack. Backend and agent tests execute in-container;
+> frontend and the Low decoy run against local tooling. The backend test run
+> self-provisions `honeyforge_test`.
 
 ---
 
@@ -258,6 +262,10 @@ discussion — they are choices, not oversights.
 
 ## 11. Current focus
 
-- **Slice:** S1 — skeleton, real schema, segmentation.
-- **Next milestone:** a controlled connection to the Low decoy appears as a
-  persisted event in the React dashboard (S2).
+- **Slice:** S2 complete — golden path with real interfaces (per-agent auth,
+  profile/config versioning, agent-generated event IDs, Low decoy, JSONL buffer,
+  batch/ack, live React feed). Checkpoint C review passed.
+- **Next:** S3 — Medium decoy (fake HTTP admin panel) on the same config/auth
+  path. Then S4 (operator JWT + roles, profile CRUD, fleet, filters, audit logs).
+- **Remaining before submission:** Medium decoy, TLS/encryption matrix, README +
+  architecture/DB diagrams, API docs, final demo recording.
