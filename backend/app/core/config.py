@@ -1,5 +1,7 @@
+from typing import Annotated
+
 from pydantic import field_validator
-from pydantic_settings import BaseSettings, SettingsConfigDict
+from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
 
 class Settings(BaseSettings):
@@ -12,7 +14,10 @@ class Settings(BaseSettings):
     agent_token_secret: str = "dev-secret"
     agent_ingest_secret: str = "dev-ingest-secret"
     dev_operator_token: str = "dev-operator-token"
-    cors_origins: list[str] = ["http://localhost:5173"]
+    # NoDecode: let pydantic-settings pass the raw env string through so the
+    # comma-split validator can run (the default source-level JSON decode raises
+    # SettingsError for a plain "http://a,http://b" value).
+    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
 
     @field_validator("cors_origins", mode="before")
     @classmethod
