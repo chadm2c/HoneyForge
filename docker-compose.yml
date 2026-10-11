@@ -25,6 +25,8 @@ services:
       AGENT_TOKEN_SECRET: ${AGENT_TOKEN_SECRET:-change-me-too}
       AGENT_INGEST_SECRET: ${AGENT_INGEST_SECRET:-change-me-ingest-secret}
       DEV_OPERATOR_TOKEN: ${DEV_OPERATOR_TOKEN:-change-me-dev-token}
+      # Consumed by `python -m app.seed` (per-agent token for the low decoy).
+      AGENT_TOKEN: ${AGENT_TOKEN:-change-me-agent-token}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
     depends_on:
       db:
@@ -47,6 +49,43 @@ services:
     networks:
       - frontend_net
 
+  agent:
+    build: ./agent
+    environment:
+      HF_CENTER_URL: http://backend:8000
+      HF_AGENT_TOKEN: ${AGENT_TOKEN:-change-me-agent-token}
+      HF_AGENT_INGEST_SECRET: ${AGENT_INGEST_SECRET:-change-me-ingest-secret}
+      HF_INGEST_PORT: "9000"
+      HF_SPOOL_PATH: /data/agent-spool.jsonl
+    volumes:
+      - agent_spool:/data
+    depends_on:
+      backend:
+        condition: service_started
+    # No host-exposed ports: only reachable on telemetry_net + agent_decoy_net.
+    networks:
+      - telemetry_net
+      - agent_decoy_net
+
+  low:
+    build: ./honeypots/low
+    environment:
+      HF_AGENT_URL: http://agent:9000
+      HF_AGENT_INGEST_SECRET: ${AGENT_INGEST_SECRET:-change-me-ingest-secret}
+    depends_on:
+      agent:
+        condition: service_started
+    # Never on telemetry_net or the host; agent sits one hop away.
+    networks:
+      - agent_decoy_net
+      - decoy_net
+
+  test-client:
+    build: ./test-client
+    # Controlled traffic source for the demo, isolated on decoy_net only.
+    networks:
+      - decoy_net
+
 networks:
   frontend_net: {} # host-facing (default bridge semantics)
   control_net:
@@ -60,3 +99,4 @@ networks:
 
 volumes:
   pgdata:
+  agent_spool:
