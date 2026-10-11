@@ -6,6 +6,8 @@ from app.db.session import get_db
 from app.models import Honeypot
 from app.schemas.agent import AgentConfigOut
 from app.schemas.config import validate_config
+from app.schemas.heartbeat import HeartbeatIn, HeartbeatOut
+from app.services.fleet_service import record_heartbeat
 from app.services.profile_service import get_profile
 
 router = APIRouter(prefix="/api/agent", tags=["agent"])
@@ -30,3 +32,14 @@ def get_config(
         interaction_level=profile.interaction_level,
         config=validate_config(profile.interaction_level, profile.config),
     )
+
+
+@router.post("/heartbeat", response_model=HeartbeatOut)
+def heartbeat(
+    body: HeartbeatIn,
+    hp: Honeypot = Depends(get_current_agent),
+    db: Session = Depends(get_db),
+) -> HeartbeatOut:
+    record_heartbeat(db, hp, body.config_version)
+    profile = get_profile(db, hp.profile_id)
+    return HeartbeatOut(ack=body.config_version, profile_version=profile.version)
