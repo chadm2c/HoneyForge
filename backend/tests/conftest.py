@@ -30,7 +30,10 @@ def client(engine):
     app = create_app()
 
     def _override_get_db():
-        yield from _session(engine)
+        # Non-destructive session: every HTTP request must NOT wipe the data
+        # that earlier requests in the same test rely on (the `db` fixture's
+        # truncation runs once at teardown).
+        yield from _plain_session(engine)
 
     app.dependency_overrides[get_db] = _override_get_db
     return TestClient(app)
@@ -46,6 +49,16 @@ def _session(engine):
         for table in reversed(Base.metadata.sorted_tables):
             s.execute(table.delete())
         s.commit()
+        s.close()
+
+
+def _plain_session(engine):
+    TestingSession = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+    s = TestingSession()
+    try:
+        yield s
+    finally:
+        s.rollback()
         s.close()
 
 
