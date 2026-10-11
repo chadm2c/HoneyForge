@@ -11,3 +11,8 @@ export function authHeaders(): Record<string, string> {
     ? { Authorization: `Bearer ${operatorToken}` }
     : {};
 }
+
+/** Fetch a control-center REST path with the operator token attached. */
+export async function apiFetch(path: string): Promise<Response> {
+  return fetch(`${apiBase}${path}`, { headers: authHeaders() });
+}

@@ -1,4 +1,5 @@
 import { apiBase } from "./api/client";
+import EventFeed from "./components/EventFeed";
 
 export default function App() {
   return (
@@ -11,14 +12,14 @@ export default function App() {
           Centralized honeypot control plane · UMIRHack 2026
         </p>
       </header>
-      <main className="px-6 py-6">
+      <main className="mx-auto max-w-4xl px-6 py-6">
         <p className="text-slate-400">
           Control center API:{" "}
           <code className="font-mono text-cyan-300">{apiBase}</code>
         </p>
-        <p className="mt-1 text-sm text-slate-600">
-          Live event feed and fleet status land here in S2.
-        </p>
+        <div className="mt-4">
+          <EventFeed />
+        </div>
       </main>
     </div>
   );
