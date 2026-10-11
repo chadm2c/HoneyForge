@@ -17,7 +17,10 @@ class Settings(BaseSettings):
     # NoDecode: let pydantic-settings pass the raw env string through so the
     # comma-split validator can run (the default source-level JSON decode raises
     # SettingsError for a plain "http://a,http://b" value).
-    cors_origins: Annotated[list[str], NoDecode] = ["http://localhost:5173"]
+    cors_origins: Annotated[list[str], NoDecode] = [
+        "http://localhost:5173",
+        "http://127.0.0.1:5173",
+    ]
 
     @field_validator("cors_origins", mode="before")
     @classmethod
