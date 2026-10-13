@@ -25,8 +25,9 @@ services:
       AGENT_TOKEN_SECRET: ${AGENT_TOKEN_SECRET:-change-me-too}
       AGENT_INGEST_SECRET: ${AGENT_INGEST_SECRET:-change-me-ingest-secret}
       DEV_OPERATOR_TOKEN: ${DEV_OPERATOR_TOKEN:-change-me-dev-token}
-      # Consumed by `python -m app.seed` (per-agent token for the low decoy).
+      # Consumed by `python -m app.seed` (per-agent tokens for the decoys).
       AGENT_TOKEN: ${AGENT_TOKEN:-change-me-agent-token}
+      MEDIUM_AGENT_TOKEN: ${MEDIUM_AGENT_TOKEN:-change-me-medium-agent-token}
       CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
     depends_on:
       db:
@@ -62,10 +63,28 @@ services:
     depends_on:
       backend:
         condition: service_started
-    # No host-exposed ports: only reachable on telemetry_net + agent_decoy_net.
+    # No host-exposed ports: only reachable on telemetry_net + agent_low_net.
     networks:
       - telemetry_net
-      - agent_decoy_net
+      - agent_low_net
+
+  agent-medium:
+    build: ./agent
+    environment:
+      HF_CENTER_URL: http://backend:8000
+      HF_AGENT_TOKEN: ${MEDIUM_AGENT_TOKEN:-change-me-medium-agent-token}
+      HF_AGENT_INGEST_SECRET: ${AGENT_INGEST_SECRET:-change-me-ingest-secret}
+      HF_INGEST_PORT: "9000"
+      HF_SPOOL_PATH: /data/agent-medium-spool.jsonl
+    volumes:
+      - agent_medium_spool:/data
+    depends_on:
+      backend:
+        condition: service_started
+    # No host-exposed ports: only reachable on telemetry_net + agent_medium_net.
+    networks:
+      - telemetry_net
+      - agent_medium_net
 
   low:
     build: ./honeypots/low
@@ -75,9 +94,22 @@ services:
     depends_on:
       agent:
         condition: service_started
-    # Never on telemetry_net or the host; agent sits one hop away.
+    # Never on telemetry_net or the host; its agent sits one hop away.
     networks:
-      - agent_decoy_net
+      - agent_low_net
+      - decoy_net
+
+  medium:
+    build: ./honeypots/medium
+    environment:
+      HF_AGENT_URL: http://agent-medium:9000
+      HF_AGENT_INGEST_SECRET: ${AGENT_INGEST_SECRET:-change-me-ingest-secret}
+    depends_on:
+      agent-medium:
+        condition: service_started
+    # Never on telemetry_net or the host; its agent sits one hop away.
+    networks:
+      - agent_medium_net
       - decoy_net
 
   test-client:
@@ -92,7 +124,9 @@ networks:
     internal: true
   telemetry_net:
     internal: true
-  agent_decoy_net:
+  agent_low_net:
+    internal: true
+  agent_medium_net:
     internal: true
   decoy_net:
     internal: true
@@ -100,3 +134,4 @@ networks:
 volumes:
   pgdata:
   agent_spool:
+  agent_medium_spool:
