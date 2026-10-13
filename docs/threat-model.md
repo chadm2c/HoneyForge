@@ -25,20 +25,23 @@ of scope.
 
 ## Trust boundaries and networks
 
-Defined in `docker-compose.yml`; four non-host networks are `internal: true`
+Defined in `docker-compose.yml`; the five non-host networks are `internal: true`
 (no gateway, no LAN/internet egress). Host ports bind to `127.0.0.1` only.
 
 | Network | Members | Trust |
 |---|---|---|
 | `frontend_net` | reverse proxy, frontend, backend | browser-facing (host-published on loopback) |
 | `control_net` | backend, database | management plane |
-| `telemetry_net` | backend, agent | center ↔ agent |
-| `agent_decoy_net` | agent, decoys | decoys report to the agent |
+| `telemetry_net` | backend, agents | center ↔ agent |
+| `agent_low_net` | `agent`, `low` | the low decoy reports to its own agent |
+| `agent_medium_net` | `agent-medium`, `medium` | the medium decoy reports to its own agent |
 | `decoy_net` | decoys, test client | attacker-facing, isolated |
 
-**The agent is never on `decoy_net`.** A compromised attacker-side container must
-not be able to reach the agent, the backend, or Postgres. Verified by
-`scripts/` and the demo's negative network checks (all fail closed).
+**No agent is ever on `decoy_net`.** Splitting the old shared `agent_decoy_net`
+into `agent_low_net` / `agent_medium_net` means each decoy can reach *only its
+own* agent, not the other pair's. A compromised attacker-side container must not
+be able to reach the agents, the backend, or Postgres. Verified by `scripts/`
+and the demo's negative network checks (all fail closed).
 
 ## What is protected
 
@@ -46,12 +49,21 @@ not be able to reach the agent, the backend, or Postgres. Verified by
   stores only `hmac_sha256(AGENT_TOKEN_SECRET, token)`. An agent can read only
   *its own* config and submit only *its own* telemetry. There is no shared
   agent↔center bearer token.
-- **Decoy isolation.** Decoys run on `decoy_net` (+ `agent_decoy_net`), have no
-  host-published ports, no Docker socket, and never forward to internal
-  services. The Low decoy only emits a banner and records metadata.
+- **Decoy isolation.** Decoys run on `decoy_net` (+ their own `agent_low_net` /
+  `agent_medium_net`), have no host-published ports, no Docker socket, and never
+  forward to internal services. The Low decoy only emits a banner and records
+  metadata.
 - **No secrets harvested.** Decoy interactions record that an attempt happened
-  plus safe metadata; submitted passwords are never stored (the Low decoy holds
-  no login form; the S3 Medium decoy must sanitize the same way).
+  plus safe metadata; submitted passwords are never stored. The Low decoy holds
+  no login form; the Medium decoy records only a boolean/`password_length`/coarse
+  username category — never the submitted value. The submitted password does not
+  appear in the event, the spool, the logs, or the HTTP response.
+- **Request sanitization (Medium).** The query string is stripped from every
+  recorded event (its presence is recorded only as the boolean `has_query`),
+  `Authorization` and `Cookie` values are never read into an event, the stdlib
+  access log is replaced with a query-free line, and the 404 page never echoes
+  the requested path. Only `application/x-www-form-urlencoded` bodies are
+  interpreted, so JSON logins always fail and cannot smuggle a payload.
 - **Event integrity & idempotency.** Event IDs are generated on the agent before
   transmission, so retries are idempotent (`INSERT ... ON CONFLICT DO NOTHING`).
 - **Durable, ack-gated buffering.** The agent removes a buffered event only when
@@ -68,8 +80,10 @@ not be able to reach the agent, the backend, or Postgres. Verified by
    compromise, a Docker daemon exploit, or a container escape. If the host or
    the Docker daemon is owned, every boundary here falls.
 2. **The agent's `/ingest` uses a shared secret** (`AGENT_INGEST_SECRET`), not
-   per-decoy credentials. Any holder of that secret on `agent_decoy_net` can
-   inject events. This is a deliberate S2 simplification (AGENTS.md §10).
+   per-decoy credentials. Any holder of that secret on an agent's decoy-facing
+   network (`agent_low_net` / `agent_medium_net`) can inject events. This is a
+   deliberate S2 simplification (AGENTS.md §10). Splitting the networks limits
+   *which* agent a compromised decoy can reach; it does not give per-decoy auth.
 3. **The S2 operator token is static and ships in the Vite bundle**
    (`VITE_OPERATOR_TOKEN`). It is a perimeter-only stand-in for a real login and
    is visible to anyone who can load the dashboard; S4 replaces it with JWT +
@@ -86,6 +100,12 @@ not be able to reach the agent, the backend, or Postgres. Verified by
    events); request-rate limits are S6.
 8. **The test client is a legitimate demo tool**, not an attacker model; a real
    attacker is unconstrained by it.
+9. **The Medium decoy's session cookie is decorative.** A correct submission of
+   the hardcoded synthetic credential pair sets an opaque cookie that merely
+   gates the fake admin pages; any non-empty `hf_admin` cookie opens them. It is
+   *not* an authentication control and protects nothing — the pages behind it are
+   static fakes. It exists to make the login flow look real so the interaction is
+   observable.
 
 ## Threat actors / scenarios
 

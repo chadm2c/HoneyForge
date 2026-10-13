@@ -152,17 +152,18 @@ These are the mistakes that silently break the design. Do not work around them.
 
 ## 6. Networks and trust boundaries
 
-Defined in Compose from S1. Segmentation is foundational, not optional. The four non-host networks are `internal: true` (no gateway, no LAN/internet egress).
+Defined in Compose from S1. Segmentation is foundational, not optional. The five non-host networks are `internal: true` (no gateway, no LAN/internet egress).
 
 | Network | Members | Purpose |
 |---|---|---|
 | `frontend_net` | reverse proxy, frontend, backend | browser-facing (host ports bound `127.0.0.1`) |
 | `control_net` | backend, database | management plane |
-| `telemetry_net` | backend, agent | center ↔ agent |
-| `agent_decoy_net` | agent, decoys | decoys report to the agent |
+| `telemetry_net` | backend, agents | center ↔ agent |
+| `agent_low_net` | `agent`, `low` | the Low decoy reports to its own agent |
+| `agent_medium_net` | `agent-medium`, `medium` | the Medium decoy reports to its own agent |
 | `decoy_net` | decoys, test client | attacker-facing, isolated |
 
-The agent is **never** on `decoy_net`. Its internal `/ingest` is not open to the attacker plane; decoys authenticate to it with `AGENT_INGEST_SECRET`. Docker network segmentation is **not** a complete security boundary. The threat model and its limits are documented in `docs/threat-model.md`.
+Each agent is **never** on `decoy_net`, and each decoy reaches only **its own** agent (the old shared `agent_decoy_net` was split into `agent_low_net` / `agent_medium_net`). The agents' internal `/ingest` is not open to the attacker plane; decoys authenticate to it with `AGENT_INGEST_SECRET`. Docker network segmentation is **not** a complete security boundary. The threat model and its limits are documented in `docs/threat-model.md`.
 
 ---
 
@@ -257,15 +258,24 @@ discussion — they are choices, not oversights.
 - Bonus features (alerts, IOC export, honeytokens, one-click deploy) are **only**
   attempted after the mandatory flow works.
 - Honeypot registration is **operator-provisioned**; never open enrollment.
+- The Medium decoy's login is **decorative**: a hardcoded, clearly-synthetic
+  credential pair issues an opaque dummy cookie that only gates static fake
+  pages. The cookie is not an authentication control (any non-empty value opens
+  the pages); it exists to make the flow observable. Only
+  `application/x-www-form-urlencoded` bodies are interpreted, so JSON logins
+  always fail. See `docs/threat-model.md`.
 
 ---
 
 ## 11. Current focus
 
-- **Slice:** S2 complete — golden path with real interfaces (per-agent auth,
-  profile/config versioning, agent-generated event IDs, Low decoy, JSONL buffer,
-  batch/ack, live React feed). Checkpoint C review passed.
-- **Next:** S3 — Medium decoy (fake HTTP admin panel) on the same config/auth
-  path. Then S4 (operator JWT + roles, profile CRUD, fleet, filters, audit logs).
-- **Remaining before submission:** Medium decoy, TLS/encryption matrix, README +
-  architecture/DB diagrams, API docs, final demo recording.
+- **Slice:** S3 implemented — Medium decoy (fake HTTP admin panel) on the same
+  config/auth path as the Low decoy. It runs on its own agent (`agent-medium`,
+  per-agent token, own spool) and its own `agent_medium_net`, so each decoy
+  reaches only its own agent. The submitted password is absent from the event,
+  the spool, the logs, and the response (verified live); the query string is
+  stripped; hostile input is bounded. Checkpoint review pending.
+- **Next:** S4 — operator JWT + roles, profile CRUD + version bump, fleet,
+  event filters/pagination, audit logs (API and minimal UI together).
+- **Remaining before submission:** S4 control-center API/UI, TLS/encryption
+  matrix, README + architecture/DB diagrams, API docs, final demo recording.
