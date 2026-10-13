@@ -1,9 +1,9 @@
 """Agent-internal ingest API.
 
-Only reachable from ``agent_decoy_net``: the decoys post observed events here
-with the shared ingest secret, and the agent validates + appends them to the
-durable buffer. This is deliberately NOT exposed on the attacker-facing
-``decoy_net`` (see AGENTS.md §6).
+Only reachable from ``agent_low_net`` / ``agent_medium_net``: each decoy posts
+observed events here with the shared ingest secret, and the agent validates +
+appends them to the durable buffer. This is deliberately NOT exposed on the
+attacker-facing ``decoy_net`` (see AGENTS.md §6).
 """
 
 import hmac

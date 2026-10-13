@@ -1,8 +1,8 @@
 """HoneyForge agent entry point.
 
 Runs one process containing:
-- an internal FastAPI ingest app (uvicorn thread) that decoys talk to on
-  ``agent_decoy_net``;
+- an internal FastAPI ingest app (uvicorn thread) that its decoy talks to on
+  ``agent_low_net`` / ``agent_medium_net`` (one agent per decoy);
 - a config poller that adopts profile versions from the control center;
 - a drainer that ships buffered events and removes only acked ones;
 - a heartbeat reporter.

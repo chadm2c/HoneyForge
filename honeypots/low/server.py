@@ -3,7 +3,7 @@
 Listens on the ports from its applied agent config, greets every connection
 with the configured banner (never a shell, never a forward), reads only a
 bounded amount of client data, and posts one ``connection`` event per accepted
-connection to the shared agent on ``agent_decoy_net``.
+connection to its agent on ``agent_low_net``.
 
 The attacker-facing ``decoy_net`` never contains the agent: see AGENTS.md §6.
 """
