@@ -194,10 +194,11 @@ def test_oversized_body_gets_413_with_one_event():
 def test_bad_content_length_gets_400_with_one_event():
     posted = []
     with running_decoy(on_event=posted.append) as decoy:
-        _send_raw(
+        response = _send_raw(
             decoy,
             b"POST /login HTTP/1.0\r\nHost: x\r\nContent-Length: nope\r\n\r\n",
         )
+        assert b"400" in response
         assert len(posted) == 1
         assert _still_serving(decoy)
 
@@ -223,7 +224,45 @@ def test_stalled_socket_times_out_with_one_event_and_server_survives():
             s.close()
         assert len(posted) == 1
         assert posted[0]["event_type"] == "path_probe"
+        # The aborted request has no parsed method/path; it must not inherit a
+        # stale one from a previous request on the same handler.
+        assert posted[0]["details"]["method"] == ""
+        assert posted[0]["details"]["path"] == ""
         assert _still_serving(decoy)
+
+
+def test_unsupported_method_is_recorded_as_path_probe():
+    posted = []
+    with running_decoy(on_event=posted.append) as decoy:
+        r = httpx.request("OPTIONS", base_url(decoy) + "/")
+    assert r.status_code == 501
+    assert len(posted) == 1
+    assert posted[0]["event_type"] == "path_probe"
+    assert posted[0]["details"]["method"] == "OPTIONS"
+    assert posted[0]["details"]["path"] == "/"
+
+
+def test_malformed_request_line_does_not_echo_the_marker():
+    marker = "LEAKME-BADLINE-777"
+    posted = []
+    with running_decoy(on_event=posted.append) as decoy:
+        response = _send_raw(decoy, f"GET /?password={marker} JUNK HTTP/1.0\r\n\r\n".encode())
+    text = response.decode("utf-8", "replace")
+    assert "400" in text
+    assert marker not in text
+    assert len(posted) == 1
+    assert marker not in json.dumps(posted)
+
+
+def test_bad_version_request_does_not_echo_the_token():
+    marker = "LEAKME-VERSION-888"
+    posted = []
+    with running_decoy(on_event=posted.append) as decoy:
+        response = _send_raw(decoy, f"GET / HTTP/{marker}\r\n\r\n".encode())
+    text = response.decode("utf-8", "replace")
+    assert "400" in text
+    assert marker not in text
+    assert marker not in json.dumps(posted)
 
 
 # --- Unit D: the submitted password never leaves the request ---------------
@@ -241,7 +280,7 @@ def test_form_password_is_recorded_only_as_length(caplog):
     posted = []
     with running_decoy(on_event=posted.append) as decoy:
         with caplog.at_level(logging.INFO):
-            httpx.post(
+            r = httpx.post(
                 base_url(decoy) + "/login",
                 data={"username": SYNTHETIC_USERNAME, "password": secret},
             )
@@ -249,6 +288,7 @@ def test_form_password_is_recorded_only_as_length(caplog):
     assert auth
     assert auth[0]["details"]["password_length"] == len(secret)
     assert secret not in json.dumps(posted)
+    assert secret not in r.text
     assert secret not in _decoy_log_text(caplog)
 
 

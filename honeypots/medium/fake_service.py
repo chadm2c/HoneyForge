@@ -68,6 +68,16 @@ def _split_path(raw: str) -> tuple[str, bool]:
     return path[:MAX_PATH_RECORDED], bool(split.query)
 
 
+def _printable(value: str, limit: int = 128) -> str:
+    """Strip control characters and bound length.
+
+    A decoy's logs and error pages are attacker-influenced, so untrusted text
+    must never carry control bytes (e.g. ANSI escapes) or unbound length.
+    """
+    cleaned = "".join(ch if ch.isprintable() else "?" for ch in value)
+    return cleaned[:limit]
+
+
 def _classify_username(value: str) -> str:
     v = value.strip()
     if not v:
@@ -138,10 +148,20 @@ class _Handler(http.server.BaseHTTPRequestHandler):
             self._record("path_probe", "unknown", {"reason": "aborted"})
 
     def log_request(self, code="-", size="-") -> None:
-        # Sanitized, bounded access log: no query string, no headers.
+        # Sanitized, bounded access log: no query string, no headers, and no
+        # control characters (a decoy's logs are attacker-influenced).
+        command = _printable(getattr(self, "command", "?") or "?")
         path = getattr(self, "path", "")
-        safe = path.split("?", 1)[0][:128]
-        log.info("http %s %s -> %s", getattr(self, "command", "?"), safe, code)
+        safe = _printable(path.split("?", 1)[0][:128])
+        log.info("http %s %s -> %s", command, safe, code)
+
+    def send_error(self, code, message=None, explain=None) -> None:
+        # The stdlib builds the 400 reason phrase from the raw request line and
+        # the 501 message from the method token -- either can carry a query
+        # string or a submitted password. Record the probe, then send a generic
+        # error with no client-derived text (see docs/threat-model.md).
+        self._record("path_probe", "unknown", {"status": int(code)})
+        super().send_error(code)
 
     # -- helpers ------------------------------------------------------------
 
@@ -198,12 +218,10 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         header = self.headers.get("Content-Length")
         if header is None:
             return b"", "missing-length"
-        try:
-            length = int(header)
-        except ValueError:
+        header = header.strip()
+        if not header.isdigit():  # reject signs, underscores, whitespace, empty
             return b"", "bad-length"
-        if length < 0:
-            return b"", "bad-length"
+        length = int(header)
         if length > MAX_BODY:
             return b"", "too-large"
         return (self.rfile.read(length) if length else b""), None
@@ -386,9 +404,16 @@ def main() -> None:
         if not cfg or cfg.get("interaction_level") != "medium":
             log.info("no medium config yet: %s", cfg)
         elif cfg.get("config_version") != current_version:
-            if decoy is None:
-                decoy = AdminDecoy([DEFAULT_PORT])
-            decoy.apply_config(cfg.get("config", {}))
+            try:
+                if decoy is None:
+                    decoy = AdminDecoy([DEFAULT_PORT])
+                decoy.apply_config(cfg.get("config", {}))
+            except OSError:
+                # e.g. a configured port is still held; keep serving and retry
+                # on the next poll instead of letting the decoy die.
+                log.exception("failed to apply config v%s; retrying", cfg.get("config_version"))
+                time.sleep(poll_interval)
+                continue
             log.info(
                 "listening on ports=%s title=%r login_enabled=%s (config v%s)",
                 decoy.bound_ports,

@@ -40,8 +40,8 @@ Defined in `docker-compose.yml`; the five non-host networks are `internal: true`
 **No agent is ever on `decoy_net`.** Splitting the old shared `agent_decoy_net`
 into `agent_low_net` / `agent_medium_net` means each decoy can reach *only its
 own* agent, not the other pair's. A compromised attacker-side container must not
-be able to reach the agents, the backend, or Postgres. Verified by `scripts/`
-and the demo's negative network checks (all fail closed).
+be able to reach the agents, the backend, or Postgres. Verified by the demo's
+documented negative checks (all fail closed).
 
 ## What is protected
 
