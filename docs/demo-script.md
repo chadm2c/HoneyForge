@@ -4,10 +4,14 @@ Reproducible golden-path walkthrough covering both interaction levels. Every
 step is a real command against the Docker Compose stack — no manual database
 edits.
 
-> **Scope note.** High-interaction honeypots are out of scope. Operator auth here
-> is the static `DEV_OPERATOR_TOKEN`; it is a perimeter-only stand-in that ships
-> in the Vite bundle and is replaced by JWT + roles in S4. The Medium decoy's
-> login is **decorative** — its cookie is not an authentication control.
+> **Scope note.** High-interaction honeypots are out of scope. Operator auth is
+> bcrypt + JWT: sign in at <http://127.0.0.1:5173/login> with the demo operator
+> (`admin` / `change-me-operator-password`) and every API call below uses the
+> bearer token that login returns. The access token lives in the SPA's
+> `localStorage` for 60 minutes with no refresh or revocation — a perimeter
+> control for the demo, not an XSS-resistant session
+> (`docs/threat-model.md`, limit #3). The Medium decoy's login is **decorative**
+> — its cookie is not an authentication control.
 
 ## 0. Prerequisites
 
@@ -24,8 +28,9 @@ docker compose ps
 ## 1. Provision the demo (seed)
 
 Idempotent: re-running creates nothing new, so the demo repeats cleanly. It
-provisions one operator and a `low` **and** `medium` profile + honeypot, each with
-its own per-agent token.
+provisions the `admin` operator (`analyst` too, when `ANALYST_PASSWORD` is set)
+and the `low` **and** `medium` profile + honeypot pairs, each with its own
+per-agent token.
 
 ```bash
 docker compose exec -T backend python -m app.seed
@@ -34,17 +39,25 @@ docker compose exec -T backend python -m app.seed
 
 Tokens are read from the environment and never printed.
 
+The `analyst` account is **opt-in** — set `ANALYST_PASSWORD` in `.env` and re-run
+the seed to demo the read-only role; with the blank default only `admin` exists.
+Signing in as the analyst hides the write controls in the SPA and the API
+answers 403 on every write (`admin` is the only role that can change state).
+
 ## 2. Confirm both agents are authorized and online
 
 Each agent fetches `GET /api/agent/config` with its **own** per-agent token and
-heartbeats; the center stores only the token hash.
+heartbeats; the center stores only the token hash. Fleet status is **derived at
+read time** — `online` while `last_seen_at` is inside `FLEET_OFFLINE_AFTER_S`
+(45s by default, 3× the 15s heartbeat) — so the `honeypots.status` column is no
+longer written and is deliberately absent from this query.
 
 ```bash
 docker compose logs agent agent-medium | grep -E "adopted config|drained"
 docker compose exec -T db psql -U honeyforge -d honeyforge \
-  -c "SELECT name, status, config_version, last_seen_at FROM honeypots ORDER BY name;"
-# low    | online | 1 | <recent>
-# medium | online | 1 | <recent>
+  -c "SELECT name, config_version, last_seen_at FROM honeypots ORDER BY name;"
+# low    | 1 | <recent>
+# medium | 1 | <recent>
 ```
 
 Each decoy logs its adopted listener once its agent publishes the config:
@@ -58,8 +71,10 @@ docker compose logs medium | grep listening
 
 ## 3. The milestone — controlled interaction → live event
 
-Open the dashboard at <http://127.0.0.1:5173> (dark SOC theme, `Live event feed`
-panel). Then, from the isolated test client on `decoy_net`, hit both decoys.
+Sign in to the dashboard at <http://127.0.0.1:5173/login> as `admin` /
+`change-me-operator-password` (dark SOC theme; you land on the **Fleet** page and
+the **Events** page carries the `Live event feed` tail). Then, from the isolated
+test client on `decoy_net`, hit both decoys.
 
 **Low (TCP banner).**
 
@@ -85,7 +100,13 @@ Within a second the events appear **live in the feed — no page refresh**:
 Verify through the API and the database:
 
 ```bash
-curl -H "Authorization: Bearer $DEV_OPERATOR_TOKEN" http://localhost:8000/api/events
+# Log in first: returns a 60-minute access token (no refresh/revocation in S4).
+TOKEN=$(curl -s -X POST http://localhost:8000/api/auth/login \
+  -H 'Content-Type: application/json' \
+  -d '{"username":"admin","password":"change-me-operator-password"}' \
+  | sed -n 's/.*"access_token":"\([^"]*\)".*/\1/p')
+
+curl -H "Authorization: Bearer $TOKEN" 'http://localhost:8000/api/events?limit=5'
 
 docker compose exec -T db psql -U honeyforge -d honeyforge -c \
   "SELECT event_type, details->>'method' AS method, details->>'path' AS path,
@@ -219,11 +240,11 @@ docker compose logs medium agent-medium backend | grep -c demo-password || true 
 ## 9. Automated tests behind the demo
 
 ```bash
-docker compose run --rm backend pytest      # control center (26)
+docker compose run --rm backend pytest      # control center (69)
 docker compose run --rm agent pytest        # agent config/buffer/telemetry/ingest (22)
-cd frontend && npm test                      # event feed dedupe + WS append (1)
+cd frontend && npm test                      # token store/client/auth gate/feed/fleet/profiles/events/audit (30)
 cd honeypots/low && pytest                   # low decoy connection → event (2)
-cd honeypots/medium && pytest                # medium decoy routes/sanitization/hostile input (19)
+cd honeypots/medium && pytest                # medium decoy routes/sanitization/hostile input (24)
 ```
 
 ## Teardown
@@ -236,7 +257,10 @@ docker compose down -v       # stop and drop volumes (fresh DB)
 ## Fallback
 
 If the live stack misbehaves, the gate is still demonstrable from tests: the
-backend suite covers idempotent ingest and the WebSocket stream, the agent suite
-covers ack-gated retry with no loss across restarts, the Medium suite covers
-login/sanitization/hostile input/password absence, and the frontend suite covers
-history + live append with dedupe by event id.
+backend suite covers idempotent ingest, the WebSocket stream, login/JWT/roles,
+profile CRUD + version bump, honeypot registration + derived fleet status, event
+filters, and audit logging; the agent suite covers ack-gated retry with no loss
+across restarts; the Medium suite covers login/sanitization/hostile
+input/password absence; and the frontend suite covers the token store, the typed
+API client, the auth gate, and all five S4 pages (login, fleet, profiles, events,
+audit).

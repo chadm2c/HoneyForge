@@ -16,7 +16,8 @@ of scope.
 
 ## Assets
 
-1. Operator credentials and the operator session (S2: static token; S4: JWT).
+1. Operator credentials and the operator session (bcrypt-hashed password; a JWT
+   access token in `localStorage`).
 2. Per-agent tokens (center stores only an HMAC hash).
 3. Attacker telemetry (`attack_events`) — integrity and availability matter more
    than confidentiality, but it must not become a pivot.
@@ -84,23 +85,34 @@ documented negative checks (all fail closed).
    network (`agent_low_net` / `agent_medium_net`) can inject events. This is a
    deliberate S2 simplification (AGENTS.md §10). Splitting the networks limits
    *which* agent a compromised decoy can reach; it does not give per-decoy auth.
-3. **The S2 operator token is static and ships in the Vite bundle**
-   (`VITE_OPERATOR_TOKEN`). It is a perimeter-only stand-in for a real login and
-   is visible to anyone who can load the dashboard; S4 replaces it with JWT +
-   roles. Until then, do not treat dashboard auth as a real boundary.
-4. **No transport encryption by default.** Nginx + TLS is a stretch item. If it
+3. **The operator session is a JWT in `localStorage`, with no revocation.** The
+   access token is a bearer credential readable by any script on the dashboard
+   origin, so an XSS exfiltrates a 60-minute session (a strict CSP is future
+   work); there is no refresh, rotation, or server-side blocklist, so a stolen
+   token stays valid until it expires. It is a perimeter control for the demo,
+   not an XSS-resistant session. The password itself is stored only
+   bcrypt-hashed, and operators are provisioned operator-side
+   (`python -m app.seed`); there is no enrollment or operator-management API.
+4. **Request-rate limiting is S6.** `/api/auth/login` is bounded only by bcrypt's
+   cost, which slows online password guessing but does not stop it. Payload caps
+   do exist (`details` ≤64KB, batch ≤500 events). The login response does not
+   reveal whether a username exists — an unknown username still performs one
+   bcrypt verification against a dummy hash, so the timing does not differ
+   either.
+5. **A registered honeypot's agent token is returned exactly once.** The center
+   stores only its HMAC hash, so the token cannot be re-read or recovered;
+   losing it means re-registering the honeypot.
+6. **No transport encryption by default.** Nginx + TLS is a stretch item. If it
    is deferred, agent↔center, operator↔backend, and decoy↔agent traffic are
    plaintext on their (internal) networks. The S6 encryption matrix must state
    the exact on/off status per link — no hand-waving.
-5. **`attack_events` cascade-deletes with its honeypot.** Decommissioning a
+7. **`attack_events` cascade-deletes with its honeypot.** Decommissioning a
    honeypot destroys its recorded events. Recorded tradeoff; revisit before S6.
-6. **Agent auth is a bearer token, not mTLS.** Token theft = agent impersonation
+8. **Agent auth is a bearer token, not mTLS.** Token theft = agent impersonation
    until rotation.
-7. **No rate limiting yet.** Payload caps exist (details ≤64KB, batch ≤500
-   events); request-rate limits are S6.
-8. **The test client is a legitimate demo tool**, not an attacker model; a real
+9. **The test client is a legitimate demo tool**, not an attacker model; a real
    attacker is unconstrained by it.
-9. **The Medium decoy's session cookie is decorative.** A correct submission of
+10. **The Medium decoy's session cookie is decorative.** A correct submission of
    the hardcoded synthetic credential pair sets an opaque cookie that merely
    gates the fake admin pages; any non-empty `hf_admin` cookie opens them. It is
    *not* an authentication control and protects nothing — the pages behind it are
@@ -118,9 +130,11 @@ documented negative checks (all fail closed).
   read its own config. Cannot read other agents' config or operate as an
   operator.
 - **Network attacker on an internal network.** Without TLS (default), can read
-  and modify traffic on the segment they control — see limit #4.
-- **Compromised operator session (S2).** The static token is in the bundle; this
-  is the weakest link until S4.
+  and modify traffic on the segment they control — see limit #6.
+- **Compromised operator session.** The JWT is a bearer token in `localStorage`
+  with no revocation, so an XSS (or a stolen unlocked laptop) keeps the session
+  until it expires — see limit #3. `analyst` limits the blast radius to reads;
+  `admin` is full control of profiles and honeypot registration.
 
 ## Out of scope
 

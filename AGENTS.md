@@ -243,9 +243,14 @@ discussion — they are choices, not oversights.
 - Local agent buffer is a **JSON Lines spool**, not SQLite.
 - Realtime uses **in-process FastAPI WebSockets**, no Redis/message broker.
 - Agent authentication is a **per-agent token** (hashed), not mTLS.
-- Operator auth in S2 is the static `DEV_OPERATOR_TOKEN` (e.g. `require_operator`),
-  replaced by JWT + roles in S4. It ships in the Vite bundle — perimeter only,
-  documented as such.
+- Operator auth is **bcrypt + JWT** (HS256). `POST /api/auth/login` returns a
+  60-minute access token, which the SPA keeps in `localStorage`; there is **no
+  refresh, rotation, or revocation**, so a stolen token stays valid until it
+  expires. Roles are `admin` (full) and `analyst` (read-only everywhere);
+  operators are provisioned operator-side by `python -m app.seed` from env vars —
+  there is no enrollment or operator-management API. `/api/auth/login` is not
+  rate-limited until S6. This is a perimeter control for the demo, not an
+  XSS-resistant session; `docs/threat-model.md` records the limits.
 - The agent's internal `/ingest` is protected by the shared `AGENT_INGEST_SECRET`,
   not per-decoy credentials.
 - `attack_events` cascade-deletes with its honeypot. Recorded tradeoff: honeypot
@@ -269,16 +274,14 @@ discussion — they are choices, not oversights.
 
 ## 11. Current focus
 
-- **Slice:** S3 complete — Medium decoy (fake HTTP admin panel) on the same
-  config/auth path as the Low decoy. It runs on its own agent (`agent-medium`,
-  per-agent token, own spool) and its own `agent_medium_net`, so each decoy
-  reaches only its own agent. The submitted password is absent from the event,
-  the spool, the logs, and the response (verified live); the query string is
-  stripped; hostile input is bounded. Checkpoint review passed (`97b8713`,
-  `c94bbad`): the stdlib `send_error` no longer reflects the request line or
-  method token into the response, unsupported-method probes are recorded, and
-  unread request bodies are drained before close.
-- **Next:** S4 — operator JWT + roles, profile CRUD + version bump, fleet,
-  event filters/pagination, audit logs (API and minimal UI together).
-- **Remaining before submission:** S4 control-center API/UI, TLS/encryption
-  matrix, README + architecture/DB diagrams, API docs, final demo recording.
+- **Slice:** S4 complete — the control-center API **and** its minimal UI
+  together: bcrypt + JWT operator auth with `admin`/`analyst` roles, profile CRUD
+  with version bump and an in-use delete guard, operator-provisioned honeypot
+  registration with a one-time agent token and derived fleet status, event
+  filters/pagination/`q` search, audit logs, and the five React pages that drive
+  them (login, fleet, profiles, events, audit). `DEV_OPERATOR_TOKEN` is fully
+  retired; no schema migration was needed (all five tables already existed).
+- **Next:** S5 — dashboard experience: overview, charts, event detail views,
+  WebSocket reconnect + history gap-fill, theme polish.
+- **Remaining before submission:** TLS/encryption matrix, README + architecture
+  and DB diagrams, API docs, seed data, final demo recording.
