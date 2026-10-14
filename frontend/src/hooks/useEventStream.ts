@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import { apiBase, apiFetch, operatorToken } from "../api/client";
+import { apiBase, apiFetch, tokenStore } from "../api/client";
 import type { AttackEvent } from "../api/types";
 
 const wsUrl = `${apiBase.replace(/^http/, "ws")}/api/ws/events`;
@@ -48,7 +48,9 @@ export function useEventStream(): { events: AttackEvent[]; connected: boolean } 
         retryRef.current = 0;
         setConnected(true);
         // First-message handshake: credentials never appear in the URL.
-        socket.send(JSON.stringify({ type: "auth", token: operatorToken }));
+        socket.send(
+          JSON.stringify({ type: "auth", token: tokenStore.get() ?? "" }),
+        );
         // Backfill on every (re)connect so a gap during downtime is covered.
         void loadHistory();
       };
