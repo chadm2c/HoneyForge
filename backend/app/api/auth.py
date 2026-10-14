@@ -8,6 +8,7 @@ from app.core.security import create_access_token, hash_password, verify_passwor
 from app.db.session import get_db
 from app.models import Operator
 from app.schemas.auth import LoginIn, OperatorOut, TokenOut
+from app.services import audit_service
 
 router = APIRouter(prefix="/api/auth", tags=["auth"])
 
@@ -19,14 +20,31 @@ _INVALID = "Invalid username or password"
 _DUMMY_HASH = hash_password("timing-equalization-only")
 
 
+def _record_failed_login(db: Session) -> None:
+    # operator_id stays unset: the row records that an attempt happened, not
+    # which account it targeted (the login response is non-enumerating too).
+    audit_service.record(
+        db, operator_id=None, action="login_failed", resource_type="operator"
+    )
+
+
 @router.post("/login", response_model=TokenOut)
 def login(body: LoginIn, db: Session = Depends(get_db)) -> TokenOut:
     operator = db.scalar(select(Operator).where(Operator.username == body.username))
     if operator is None:
         verify_password(body.password, _DUMMY_HASH)
+        _record_failed_login(db)
         raise HTTPException(status_code=401, detail=_INVALID)
     if not verify_password(body.password, operator.password_hash):
+        _record_failed_login(db)
         raise HTTPException(status_code=401, detail=_INVALID)
+    audit_service.record(
+        db,
+        operator_id=operator.id,
+        action="login",
+        resource_type="operator",
+        resource_id=operator.id,
+    )
     return TokenOut(
         access_token=create_access_token(str(operator.id), operator.role),
         expires_in=settings.jwt_expires_minutes * 60,

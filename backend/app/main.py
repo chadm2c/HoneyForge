@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.agent import router as agent_router
+from app.api.audit import router as audit_router
 from app.api.auth import router as auth_router
 from app.api.events import router as events_router
 from app.api.telemetry import router as telemetry_router
@@ -33,6 +34,7 @@ def create_app() -> FastAPI:
     app.include_router(agent_router)
     app.include_router(telemetry_router)
     app.include_router(events_router)
+    app.include_router(audit_router)
     app.include_router(ws_router)
 
     @app.get("/health")
