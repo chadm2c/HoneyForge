@@ -1,12 +1,12 @@
-import hmac
+import uuid
 
+import jwt
 from fastapi import Depends, Header, HTTPException
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.core.security import hash_agent_token
+from app.core.security import decode_access_token, hash_agent_token
 from app.db.session import get_db
-from app.models import Honeypot
+from app.models import Honeypot, Operator
 
 
 def _bearer_token(authorization: str | None) -> str:
@@ -31,10 +31,25 @@ def get_current_agent(
     return hp
 
 
-async def require_operator(
+def require_operator(
     authorization: str | None = Header(default=None),
-) -> None:
-    """S2 operator seam: static DEV_OPERATOR_TOKEN. S4 swaps this for JWT in place."""
+    db: Session = Depends(get_db),
+) -> Operator:
+    """Resolve the bearer JWT to its Operator row. 401 on any invalid token."""
     token = _bearer_token(authorization)
-    if not hmac.compare_digest(token, settings.dev_operator_token):
-        raise HTTPException(status_code=401, detail="Invalid operator token")
+    try:
+        claims = decode_access_token(token)
+        operator_id = uuid.UUID(str(claims["sub"]))
+    except (jwt.PyJWTError, KeyError, ValueError):
+        raise HTTPException(status_code=401, detail="Invalid or expired token") from None
+    operator = db.get(Operator, operator_id)
+    if operator is None:
+        raise HTTPException(status_code=401, detail="Invalid or expired token")
+    return operator
+
+
+def require_admin(operator: Operator = Depends(require_operator)) -> Operator:
+    """Layer on require_operator: analyst is read-only, every write needs admin."""
+    if operator.role != "admin":
+        raise HTTPException(status_code=403, detail="Admin role required")
+    return operator

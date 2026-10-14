@@ -1,15 +1,25 @@
-from fastapi import Depends, FastAPI
+import logging
+
+from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api.agent import router as agent_router
-from app.api.deps import require_operator
+from app.api.auth import router as auth_router
 from app.api.events import router as events_router
 from app.api.telemetry import router as telemetry_router
 from app.api.ws import router as ws_router
-from app.core.config import settings
+from app.core.config import DEV_JWT_SECRET, settings
+
+logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
+    if settings.jwt_secret == DEV_JWT_SECRET:
+        logger.warning(
+            "JWT_SECRET is the documented dev placeholder; set a real secret "
+            "before exposing the control center."
+        )
+
     app = FastAPI(title="HoneyForge Control Center")
     app.add_middleware(
         CORSMiddleware,
@@ -19,6 +29,7 @@ def create_app() -> FastAPI:
         allow_headers=["*"],
     )
 
+    app.include_router(auth_router)
     app.include_router(agent_router)
     app.include_router(telemetry_router)
     app.include_router(events_router)
@@ -27,10 +38,5 @@ def create_app() -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
-
-    # S2 dev diagnostic; replaced by real S4 routes.
-    @app.get("/api/operator/whoami")
-    def operator_whoami(_: None = Depends(require_operator)) -> dict[str, str]:
-        return {"ok": "true"}
 
     return app

@@ -18,7 +18,6 @@ class Settings(BaseSettings):
     )
     agent_token_secret: str = "dev-secret"
     agent_ingest_secret: str = "dev-ingest-secret"
-    dev_operator_token: str = "dev-operator-token"
     jwt_secret: str = DEV_JWT_SECRET
     jwt_expires_minutes: int = 60
     fleet_offline_after_s: int = 45

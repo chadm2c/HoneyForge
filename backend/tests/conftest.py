@@ -7,12 +7,17 @@ from sqlalchemy import create_engine
 from sqlalchemy.engine import make_url
 from sqlalchemy.orm import sessionmaker
 
-from app.core.security import generate_agent_token, hash_agent_token
-from app.db.base import Base
 from app.core.config import settings
+from app.core.security import (
+    create_access_token,
+    generate_agent_token,
+    hash_agent_token,
+    hash_password,
+)
+from app.db.base import Base
 from app.db.session import get_db
 from app.main import create_app
-from app.models import AttackEvent, Honeypot, Profile
+from app.models import AttackEvent, Honeypot, Operator, Profile
 
 
 @pytest.fixture(scope="session")
@@ -115,6 +120,21 @@ def honeypot_factory(db):
         db.add(hp)
         db.commit()
         return hp, token
+
+    yield make
+
+
+@pytest.fixture
+def operator_factory(db):
+    """Create an Operator with a known password and return (operator, password, jwt)."""
+
+    def make(role="admin", username="op", password="correct-horse"):
+        operator = Operator(
+            username=username, password_hash=hash_password(password), role=role
+        )
+        db.add(operator)
+        db.commit()
+        return operator, password, create_access_token(str(operator.id), operator.role)
 
     yield make
 

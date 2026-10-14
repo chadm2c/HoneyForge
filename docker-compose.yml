@@ -24,7 +24,14 @@ services:
       TEST_DATABASE_URL: postgresql+psycopg://${POSTGRES_USER:-honeyforge}:${POSTGRES_PASSWORD:-change-me}@db:5432/honeyforge_test
       AGENT_TOKEN_SECRET: ${AGENT_TOKEN_SECRET:-change-me-too}
       AGENT_INGEST_SECRET: ${AGENT_INGEST_SECRET:-change-me-ingest-secret}
-      DEV_OPERATOR_TOKEN: ${DEV_OPERATOR_TOKEN:-change-me-dev-token}
+      JWT_SECRET: ${JWT_SECRET:-change-me-jwt-secret-at-least-32-bytes-long}
+      JWT_EXPIRES_MINUTES: ${JWT_EXPIRES_MINUTES:-60}
+      FLEET_OFFLINE_AFTER_S: ${FLEET_OFFLINE_AFTER_S:-45}
+      # Consumed by `python -m app.seed` (operator + optional analyst provisioning).
+      OPERATOR_USERNAME: ${OPERATOR_USERNAME:-admin}
+      OPERATOR_PASSWORD: ${OPERATOR_PASSWORD:-change-me-operator-password}
+      ANALYST_USERNAME: ${ANALYST_USERNAME:-analyst}
+      ANALYST_PASSWORD: ${ANALYST_PASSWORD:-}
       # Consumed by `python -m app.seed` (per-agent tokens for the decoys).
       AGENT_TOKEN: ${AGENT_TOKEN:-change-me-agent-token}
       MEDIUM_AGENT_TOKEN: ${MEDIUM_AGENT_TOKEN:-change-me-medium-agent-token}
@@ -44,7 +51,6 @@ services:
     build: ./frontend
     environment:
       VITE_API_BASE_URL: ${VITE_API_BASE_URL:-http://localhost:8000}
-      VITE_OPERATOR_TOKEN: ${VITE_OPERATOR_TOKEN:-change-me-dev-token}
     ports:
       - "${HOST_BIND:-127.0.0.1}:5173:5173"
     networks:

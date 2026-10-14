@@ -1,4 +1,3 @@
-from app.core.config import settings
 from tests.helpers import auth
 
 
@@ -19,14 +18,12 @@ def test_valid_token_returns_its_own_honeypot(client, honeypot_factory):
 
 
 def test_operator_endpoint_rejects_agent_token(client, honeypot_factory):
-    _, token = honeypot_factory()
-    assert client.get("/api/operator/whoami", headers=auth(token)).status_code == 401
+    _, agent_token = honeypot_factory()
+    assert client.get("/api/auth/me", headers=auth(agent_token)).status_code == 401
 
 
-def test_operator_endpoint_accepts_operator_token(client):
-    assert (
-        client.get(
-            "/api/operator/whoami", headers=auth(settings.dev_operator_token)
-        ).status_code
-        == 200
-    )
+def test_operator_endpoint_accepts_operator_jwt(client, operator_factory):
+    _, _, jwt_token = operator_factory()
+    r = client.get("/api/auth/me", headers=auth(jwt_token))
+    assert r.status_code == 200
+    assert r.json()["role"] == "admin"

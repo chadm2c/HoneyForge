@@ -1,9 +1,8 @@
-import hmac
-
+import jwt
 from fastapi import APIRouter, WebSocket
 from starlette.websockets import WebSocketDisconnect
 
-from app.core.config import settings
+from app.core.security import decode_access_token
 from app.realtime.websocket_manager import manager
 
 router = APIRouter()
@@ -21,12 +20,17 @@ async def ws_events(websocket: WebSocket) -> None:
         await websocket.close(code=1008)
         return
     raw_token = first.get("token") if isinstance(first, dict) else None
-    authed = (
+    claims = None
+    if (
         isinstance(first, dict)
         and first.get("type") == "auth"
         and isinstance(raw_token, str)
-        and hmac.compare_digest(raw_token, settings.dev_operator_token)
-    )
+    ):
+        try:
+            claims = decode_access_token(raw_token)
+        except jwt.PyJWTError:
+            claims = None
+    authed = claims is not None and "sub" in claims
     if not authed:
         await websocket.close(code=1008)
         return

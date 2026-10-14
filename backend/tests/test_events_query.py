@@ -1,11 +1,11 @@
-from app.core.config import settings
 from tests.helpers import auth
 
 
-def test_filters_and_pagination(client, seed_events):
+def test_filters_and_pagination(client, seed_events, operator_factory):
+    _, _, jwt_token = operator_factory()
     r = client.get(
         "/api/events",
-        headers=auth(settings.dev_operator_token),
+        headers=auth(jwt_token),
         params={"honeypot_id": seed_events["a"], "limit": 2, "offset": 0},
     )
     body = r.json()

@@ -1,13 +1,15 @@
 """Demo provisioning seed.
 
-Creates the golden-path rows: one ``admin`` operator, a ``low`` profile +
-honeypot whose token hash matches ``AGENT_TOKEN``, and (when a
-``medium_agent_token`` is supplied) a ``medium`` profile + honeypot whose token
-hash matches it.
+Creates the golden-path rows: the ``admin`` operator (bcrypt-hashed password),
+an optional ``analyst`` operator, a ``low`` profile + honeypot whose token hash
+matches ``AGENT_TOKEN``, and (when a ``medium_agent_token`` is supplied) a
+``medium`` profile + honeypot whose token hash matches it.
 
-Idempotent by name: re-running matches existing rows (updating a honeypot's
-token hash if the provided token changed), so the demo is exactly repeatable.
-Tokens are read from env and never printed.
+Idempotent: re-running matches existing rows by name. An operator's password is
+re-hashed only when the configured password no longer verifies, so a re-seed
+does not rotate the stored hash (bcrypt salts differ on every call). A
+honeypot's token hash is updated when the provided token changed. Tokens and
+passwords are read from env and never printed.
 """
 
 import os
@@ -15,11 +17,26 @@ import os
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.core.security import hash_agent_token
+from app.core.security import hash_agent_token, hash_password, verify_password
 from app.models import Honeypot, Operator, Profile
 
 DEFAULT_BANNER = "SSH-2.0-OpenSSH_8.9"
 DEFAULT_MEDIUM_TITLE = "Admin Panel"
+
+
+def _upsert_operator(db: Session, username: str, password: str, role: str) -> Operator:
+    """Idempotently create the operator, re-hashing only if the password changed."""
+    operator = db.scalar(select(Operator).where(Operator.username == username))
+    if operator is None:
+        operator = Operator(
+            username=username,
+            password_hash=hash_password(password),
+            role=role,
+        )
+        db.add(operator)
+    elif not verify_password(password, operator.password_hash):
+        operator.password_hash = hash_password(password)
+    return operator
 
 
 def _upsert_honeypot(
@@ -60,18 +77,22 @@ def _upsert_honeypot(
 
 def seed_demo(
     db: Session,
+    *,
     agent_token: str,
-    operator_token: str,
+    operator_password: str,
     medium_agent_token: str | None = None,
+    operator_username: str = "admin",
+    analyst_username: str = "analyst",
+    analyst_password: str | None = None,
 ) -> dict:
-    operator = db.scalar(select(Operator).where(Operator.username == "admin"))
-    if operator is None:
-        operator = Operator(
-            username="admin",
-            password_hash=hash_agent_token(operator_token),  # S2 placeholder, replaced by JWT auth in S4
-            role="admin",
+    out: dict = {
+        "operator": _upsert_operator(db, operator_username, operator_password, "admin")
+    }
+
+    if analyst_password:
+        out["analyst"] = _upsert_operator(
+            db, analyst_username, analyst_password, "analyst"
         )
-        db.add(operator)
 
     profile, honeypot = _upsert_honeypot(
         db,
@@ -80,7 +101,8 @@ def seed_demo(
         config={"ports": [2222], "banner": DEFAULT_BANNER},
         token=agent_token,
     )
-    out: dict = {"operator": operator, "profile": profile, "honeypot": honeypot}
+    out["profile"] = profile
+    out["honeypot"] = honeypot
 
     if medium_agent_token is not None:
         medium_profile, medium_honeypot = _upsert_honeypot(
@@ -94,7 +116,7 @@ def seed_demo(
         out["medium_honeypot"] = medium_honeypot
 
     db.commit()
-    for obj in (operator, *[v for k, v in out.items() if k != "operator"]):
+    for obj in out.values():
         db.refresh(obj)
     return out
 
@@ -102,26 +124,27 @@ def seed_demo(
 if __name__ == "__main__":
     from app.db.session import SessionLocal
 
-    agent_token = os.environ["AGENT_TOKEN"]
-    operator_token = os.environ["DEV_OPERATOR_TOKEN"]
-    medium_agent_token = os.environ.get("MEDIUM_AGENT_TOKEN")
     with SessionLocal() as session:
         out = seed_demo(
             session,
-            agent_token=agent_token,
-            operator_token=operator_token,
-            medium_agent_token=medium_agent_token,
+            agent_token=os.environ["AGENT_TOKEN"],
+            operator_password=os.environ["OPERATOR_PASSWORD"],
+            medium_agent_token=os.environ.get("MEDIUM_AGENT_TOKEN"),
+            operator_username=os.environ.get("OPERATOR_USERNAME", "admin"),
+            analyst_username=os.environ.get("ANALYST_USERNAME", "analyst"),
+            analyst_password=os.environ.get("ANALYST_PASSWORD") or None,
         )
-    line = "seeded operator=%s profile=%s (v%s) honeypot=%s" % (
-        out["operator"].username,
-        out["profile"].name,
-        out["profile"].version,
-        out["honeypot"].name,
+    line = (
+        f"seeded operator={out['operator'].username}"
+        f" profile={out['profile'].name} (v{out['profile'].version})"
+        f" honeypot={out['honeypot'].name}"
     )
+    if "analyst" in out:
+        line += f" analyst={out['analyst'].username}"
     if "medium_honeypot" in out:
-        line += " profile=%s (v%s) honeypot=%s" % (
-            out["medium_profile"].name,
-            out["medium_profile"].version,
-            out["medium_honeypot"].name,
+        line += (
+            f" profile={out['medium_profile'].name}"
+            f" (v{out['medium_profile'].version})"
+            f" honeypot={out['medium_honeypot'].name}"
         )
     print(line)
