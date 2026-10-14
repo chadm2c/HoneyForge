@@ -18,6 +18,7 @@ def query_events(
     honeypot_id: uuid.UUID | None = None,
     event_type: str | None = None,
     source_ip: str | None = None,
+    q: str | None = Query(default=None, max_length=200),
     since: datetime | None = None,
     until: datetime | None = None,
     limit: int = Query(default=50, ge=1, le=200),
@@ -29,6 +30,7 @@ def query_events(
         honeypot_id=honeypot_id,
         event_type=event_type,
         source_ip=source_ip,
+        q=q,
         since=since,
         until=until,
     )

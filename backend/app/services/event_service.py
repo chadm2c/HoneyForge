@@ -19,6 +19,7 @@ class EventFilters(BaseModel):
     honeypot_id: uuid.UUID | None = None
     event_type: str | None = None
     source_ip: str | None = None
+    q: str | None = None
     since: datetime | None = None
     until: datetime | None = None
 
@@ -63,6 +64,17 @@ def ingest_events(
     return IngestResult(accepted=accepted, duplicates=duplicates)
 
 
+def _like_pattern(q: str) -> str:
+    """Wrap a search term in %...% with LIKE's metacharacters escaped.
+
+    The backslash is replaced first, so a term that already contains one cannot
+    turn into an escape character for the escapes added after it. Without this,
+    ``q=%`` would match every row instead of only rows containing a literal %.
+    """
+    escaped = q.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+    return f"%{escaped}%"
+
+
 def list_events(
     db: Session,
     filters: EventFilters,
@@ -71,6 +83,14 @@ def list_events(
 ) -> tuple[list[AttackEvent], int]:
     """Newest-first page of events matching the filters, plus the total count."""
     conds = []
+    if filters.q:
+        pattern = _like_pattern(filters.q)
+        conds.append(
+            sa.or_(
+                AttackEvent.event_type.ilike(pattern, escape="\\"),
+                sa.cast(AttackEvent.details, sa.Text).ilike(pattern, escape="\\"),
+            )
+        )
     if filters.honeypot_id:
         conds.append(AttackEvent.honeypot_id == filters.honeypot_id)
     if filters.event_type:
