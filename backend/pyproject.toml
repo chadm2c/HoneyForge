@@ -26,3 +26,10 @@ dev = [
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 pythonpath = ["."]
+
+[tool.ruff.lint.per-file-ignores]
+# FastAPI declares request dependencies as `param: Session = Depends(get_db)`.
+# That is the documented dependency-injection idiom, not the mutable-default
+# bug B008 targets, so it is ignored for the API routers only — everywhere else
+# B008 still fires.
+"app/api/*.py" = ["B008"]

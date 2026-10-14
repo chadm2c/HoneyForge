@@ -1,11 +1,17 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, Integer, String, Uuid, func
 from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    # The relationship target is resolved by name through SQLAlchemy's class
+    # registry, so this import exists for type checkers and never at runtime.
+    from app.models.honeypot import Honeypot
 
 
 class Profile(Base):

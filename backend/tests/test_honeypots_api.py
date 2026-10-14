@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from app.core.config import settings
 from app.core.security import hash_agent_token
@@ -67,14 +67,14 @@ def test_fleet_status_is_derived_from_last_seen(client, operator_factory, db):
     fleet = client.get("/api/honeypots", headers=auth(admin)).json()
     assert fleet[0]["status"] == "never"
 
-    hp.last_seen_at = datetime.now(timezone.utc)
+    hp.last_seen_at = datetime.now(UTC)
     db.commit()
     assert (
         client.get("/api/honeypots", headers=auth(admin)).json()[0]["status"]
         == "online"
     )
 
-    hp.last_seen_at = datetime.now(timezone.utc) - timedelta(
+    hp.last_seen_at = datetime.now(UTC) - timedelta(
         seconds=settings.fleet_offline_after_s + 1
     )
     db.commit()
@@ -89,7 +89,7 @@ def test_status_boundary_at_the_threshold_is_online():
     # without racing the clock. Through HTTP the read always lands a few
     # milliseconds after the write, i.e. just past an exact-threshold stamp.
     hp = Honeypot(name="hp", profile_id=uuid.uuid4(), agent_token_hash="h")
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     hp.last_seen_at = now - timedelta(seconds=settings.fleet_offline_after_s)
     assert derive_status(hp, now=now) == "online"
     hp.last_seen_at = now - timedelta(seconds=settings.fleet_offline_after_s + 1)

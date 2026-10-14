@@ -2,7 +2,7 @@ import hashlib
 import hmac
 import secrets
 import uuid
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 import bcrypt
 import jwt
@@ -45,7 +45,7 @@ def verify_password(password: str, password_hash: str) -> bool:
 
 def create_access_token(subject: str, role: str) -> str:
     """Mint a short-lived HS256 operator access token."""
-    now = datetime.now(timezone.utc)
+    now = datetime.now(UTC)
     claims = {
         "sub": subject,
         "role": role,

@@ -16,7 +16,10 @@ async def ws_events(websocket: WebSocket) -> None:
     await websocket.accept()
     try:
         first = await websocket.receive_json()
-    except Exception:
+    # A closed socket (WebSocketDisconnect) or a malformed frame (ValueError,
+    # which covers json.JSONDecodeError) is the peer's fault and both close the
+    # socket unauthenticated; anything else is a bug and should surface.
+    except (WebSocketDisconnect, ValueError):
         await websocket.close(code=1008)
         return
     raw_token = first.get("token") if isinstance(first, dict) else None

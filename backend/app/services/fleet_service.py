@@ -1,4 +1,4 @@
-from datetime import datetime, timedelta, timezone
+from datetime import UTC, datetime, timedelta
 
 from fastapi import HTTPException
 from sqlalchemy import select
@@ -14,7 +14,7 @@ def record_heartbeat(
     db: Session, honeypot: Honeypot, config_version: int
 ) -> Honeypot:
     """Record a heartbeat. ``status`` is derived at read time, never stored."""
-    honeypot.last_seen_at = datetime.now(timezone.utc)
+    honeypot.last_seen_at = datetime.now(UTC)
     honeypot.config_version = config_version
     db.add(honeypot)
     db.commit()
@@ -31,7 +31,7 @@ def derive_status(hp: Honeypot, now: datetime | None = None) -> str:
     """
     if hp.last_seen_at is None:
         return "never"
-    reference = now or datetime.now(timezone.utc)
+    reference = now or datetime.now(UTC)
     age = reference - hp.last_seen_at
     return (
         "online"

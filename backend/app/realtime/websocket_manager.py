@@ -22,7 +22,9 @@ class ConnectionManager:
         for ws in self._connections:
             try:
                 await ws.send_json(payload)
-            except Exception:
+            # Best-effort fan-out: one dead or back-pressured socket must not
+            # abort the broadcast to all the others, so any failure prunes it.
+            except Exception:  # noqa: BLE001
                 dead.append(ws)
         for ws in dead:
             self.disconnect(ws)

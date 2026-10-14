@@ -2,7 +2,7 @@ from tests.helpers import auth
 
 
 def test_config_returns_assigned_profile_version(client, honeypot_factory):
-    hp, token = honeypot_factory(
+    _hp, token = honeypot_factory(
         interaction_level="low", config={"ports": [2222], "banner": "SSH-2.0-x"}
     )
     r = client.get("/api/agent/config", headers=auth(token))
@@ -13,8 +13,8 @@ def test_config_returns_assigned_profile_version(client, honeypot_factory):
 
 
 def test_config_is_scoped_to_the_authenticated_agent(client, honeypot_factory):
-    a, ta = honeypot_factory(name="a", config={"ports": [2222]})
-    b, tb = honeypot_factory(name="b", config={"ports": [2323]})
+    _a, ta = honeypot_factory(name="a", config={"ports": [2222]})
+    _b, tb = honeypot_factory(name="b", config={"ports": [2323]})
     ra = client.get("/api/agent/config", headers=auth(ta)).json()
     rb = client.get("/api/agent/config", headers=auth(tb)).json()
     assert ra["config"]["ports"] == [2222]

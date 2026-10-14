@@ -1,4 +1,4 @@
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 from fastapi import APIRouter, Depends, HTTPException
 from sqlalchemy.orm import Session
@@ -41,7 +41,7 @@ async def submit_events(
                     protocol=ev.protocol,
                     details=ev.details,
                     occurred_at=ev.occurred_at,
-                    received_at=datetime.now(timezone.utc),
+                    received_at=datetime.now(UTC),
                 )
                 await manager.broadcast(payload.model_dump(mode="json"))
     return result

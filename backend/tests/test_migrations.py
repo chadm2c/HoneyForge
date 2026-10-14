@@ -1,10 +1,10 @@
 import os
 
 import sqlalchemy as sa
-from alembic import command
 from alembic.config import Config
 
 import app.models  # noqa: F401
+from alembic import command
 from app.core.config import settings
 from app.db.base import Base
 

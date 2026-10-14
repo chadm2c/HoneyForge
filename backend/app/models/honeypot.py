@@ -1,10 +1,17 @@
 import uuid
 from datetime import datetime
+from typing import TYPE_CHECKING
 
 from sqlalchemy import DateTime, ForeignKey, Integer, String, Text, Uuid, func
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db.base import Base
+
+if TYPE_CHECKING:
+    # Relationship targets resolved by SQLAlchemy's class registry; type-checker
+    # only, so the models keep importing each other without a runtime cycle.
+    from app.models.attack_event import AttackEvent
+    from app.models.profile import Profile
 
 
 class Honeypot(Base):

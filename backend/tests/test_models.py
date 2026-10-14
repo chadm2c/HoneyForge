@@ -1,6 +1,5 @@
-from app.db.base import Base
-
 import app.models  # noqa: F401  (ensures models are imported)
+from app.db.base import Base
 
 EXPECTED = {"operators", "profiles", "honeypots", "attack_events", "audit_logs"}
 

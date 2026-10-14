@@ -2,7 +2,7 @@ from tests.helpers import auth
 
 
 def test_ingest_is_idempotent(client, honeypot_factory, make_event):
-    hp, token = honeypot_factory()
+    _hp, token = honeypot_factory()
     e1, e2 = make_event(), make_event()
     r1 = client.post(
         "/api/telemetry/events", headers=auth(token), json={"events": [e1, e2]}
@@ -16,7 +16,7 @@ def test_ingest_is_idempotent(client, honeypot_factory, make_event):
 
 
 def test_oversized_details_rejected(client, honeypot_factory, make_event):
-    hp, token = honeypot_factory()
+    _hp, token = honeypot_factory()
     e = make_event(details={"blob": "x" * 70_000})
     r = client.post(
         "/api/telemetry/events", headers=auth(token), json={"events": [e]}

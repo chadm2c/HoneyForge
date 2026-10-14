@@ -1,5 +1,5 @@
 import uuid
-from datetime import datetime, timezone
+from datetime import UTC, datetime
 
 import pytest
 from fastapi.testclient import TestClient
@@ -158,7 +158,7 @@ def make_event():
             "target_port": 2222,
             "protocol": "tcp",
             "details": {},
-            "occurred_at": datetime.now(timezone.utc).isoformat(),
+            "occurred_at": datetime.now(UTC).isoformat(),
         }
         e.update(overrides)
         return e
@@ -180,7 +180,7 @@ def seed_events(honeypot_factory, db):
             target_port=2222,
             protocol="tcp",
             details={"user": "root"} if i else {},
-            occurred_at=datetime(2026, 1, 1, 12, 0, i, tzinfo=timezone.utc),
+            occurred_at=datetime(2026, 1, 1, 12, 0, i, tzinfo=UTC),
         )
         for i in range(3)
     ]
@@ -194,7 +194,7 @@ def seed_events(honeypot_factory, db):
             target_port=22,
             protocol="tcp",
             details={},
-            occurred_at=datetime(2026, 1, 1, 12, 1, i, tzinfo=timezone.utc),
+            occurred_at=datetime(2026, 1, 1, 12, 1, i, tzinfo=UTC),
         )
         for i in range(2)
     ]

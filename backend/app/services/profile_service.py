@@ -29,7 +29,7 @@ def create_profile(
     """
     try:
         validated = validate_config(interaction_level, config)
-    except Exception as exc:
+    except ValueError as exc:  # pydantic's ValidationError subclasses ValueError
         raise HTTPException(status_code=422, detail=f"Invalid profile config: {exc}")
 
     profile = Profile(
@@ -61,7 +61,7 @@ def update_profile(db: Session, profile_id, patch: dict) -> Profile:
     config = patch.get("config", p.config)
     try:
         validated = validate_config(interaction_level, config)
-    except Exception as exc:
+    except ValueError as exc:  # pydantic's ValidationError subclasses ValueError
         raise HTTPException(status_code=422, detail=f"Invalid profile config: {exc}")
 
     p.interaction_level = interaction_level

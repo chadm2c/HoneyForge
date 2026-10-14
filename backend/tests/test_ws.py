@@ -41,26 +41,32 @@ def test_ws_rejects_a_forged_token(client):
         "wrong-secret-but-long-enough-for-hs256",
         algorithm="HS256",
     )
-    with pytest.raises(WebSocketDisconnect) as exc:
-        with client.websocket_connect("/api/ws/events") as ws:
-            ws.send_json({"type": "auth", "token": forged})
-            ws.receive_json()
+    with (
+        pytest.raises(WebSocketDisconnect) as exc,
+        client.websocket_connect("/api/ws/events") as ws,
+    ):
+        ws.send_json({"type": "auth", "token": forged})
+        ws.receive_json()
     assert exc.value.code == 1008
 
 
 def test_ws_rejects_bad_token(client):
-    with pytest.raises(WebSocketDisconnect) as exc:
-        with client.websocket_connect("/api/ws/events") as ws:
-            ws.send_json({"type": "auth", "token": "nope"})
-            ws.receive_json()
+    with (
+        pytest.raises(WebSocketDisconnect) as exc,
+        client.websocket_connect("/api/ws/events") as ws,
+    ):
+        ws.send_json({"type": "auth", "token": "nope"})
+        ws.receive_json()
     assert exc.value.code == 1008
 
 
 def test_ws_rejects_non_string_token(client):
     # A non-str token must close cleanly (1008), not blow up the handler:
     # decode_access_token expects a str and the type check must come first.
-    with pytest.raises(WebSocketDisconnect) as exc:
-        with client.websocket_connect("/api/ws/events") as ws:
-            ws.send_json({"type": "auth", "token": 12345})
-            ws.receive_json()
+    with (
+        pytest.raises(WebSocketDisconnect) as exc,
+        client.websocket_connect("/api/ws/events") as ws,
+    ):
+        ws.send_json({"type": "auth", "token": 12345})
+        ws.receive_json()
     assert exc.value.code == 1008
