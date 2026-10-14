@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { listEvents, listHoneypots } from "../api/client";
 import type { AttackEvent, Honeypot } from "../api/types";
 import EventFeed from "../components/EventFeed";
+import { localToIso } from "../lib/datetime";
 
 const PAGE_SIZE = 50;
 const FIELD =
@@ -26,17 +27,6 @@ const NO_FILTERS: Filters = {
   since: "",
   until: "",
 };
-
-/**
- * `<input type="datetime-local">` is wall-clock in the operator's timezone, but
- * `occurred_at`/`received_at` are UTC, so the filter is converted before it is
- * sent. An unparseable value is dropped rather than sent as "Invalid Date".
- */
-function toIso(local: string): string | undefined {
-  if (!local) return undefined;
-  const parsed = new Date(local);
-  return Number.isNaN(parsed.getTime()) ? undefined : parsed.toISOString();
-}
 
 export default function EventsPage() {
   const [honeypots, setHoneypots] = useState<Honeypot[]>([]);
@@ -67,8 +57,8 @@ export default function EventsPage() {
     setLoading(true);
     listEvents({
       ...filters,
-      since: toIso(filters.since),
-      until: toIso(filters.until),
+      since: localToIso(filters.since),
+      until: localToIso(filters.until),
       limit: PAGE_SIZE,
       offset,
     })

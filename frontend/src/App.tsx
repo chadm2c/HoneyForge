@@ -2,15 +2,11 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import { AuthProvider } from "./auth/AuthContext";
 import RequireAuth from "./auth/RequireAuth";
 import AppShell from "./components/AppShell";
-import LoginPage from "./pages/LoginPage";
-import FleetPage from "./pages/FleetPage";
-import ProfilesPage from "./pages/ProfilesPage";
+import AuditPage from "./pages/AuditPage";
 import EventsPage from "./pages/EventsPage";
-
-/** Stand-in for the page still being built in S4 (Task 12). */
-function Placeholder({ label }: { label: string }) {
-  return <p className="text-sm text-slate-500">{label} — coming next in S4.</p>;
-}
+import FleetPage from "./pages/FleetPage";
+import LoginPage from "./pages/LoginPage";
+import ProfilesPage from "./pages/ProfilesPage";
 
 export default function App() {
   return (
@@ -27,7 +23,7 @@ export default function App() {
           <Route path="fleet" element={<FleetPage />} />
           <Route path="profiles" element={<ProfilesPage />} />
           <Route path="events" element={<EventsPage />} />
-          <Route path="audit" element={<Placeholder label="Audit" />} />
+          <Route path="audit" element={<AuditPage />} />
         </Route>
         <Route path="*" element={<Navigate to="/fleet" replace />} />
       </Routes>
