@@ -1303,11 +1303,15 @@ export function renderWithProviders(
   opts: { route?: string; operator?: Operator | null; fetchImpl?: (url: string, init?: RequestInit) => Promise<Response> } = {},
 ) {
   const operator = opts.operator === undefined ? DEFAULT_ADMIN : opts.operator;
-  const fetchImpl = opts.fetchImpl ?? (async (url: string) =>
-    String(url).includes("/api/auth/me")
-      ? jsonResponse(operator)
-      : jsonResponse({ items: [], total: 0 }));
-  vi.stubGlobal("fetch", vi.fn(fetchImpl));
+  vi.stubGlobal(
+    "fetch",
+    vi.fn(async (url: string, init?: RequestInit) => {
+      // /api/auth/me is always answered by the helper so a page's own fetchImpl
+      // never has to know about the AuthProvider handshake.
+      if (String(url).includes("/api/auth/me")) return jsonResponse(operator);
+      return opts.fetchImpl ? opts.fetchImpl(url, init) : jsonResponse({ items: [], total: 0 });
+    }),
+  );
   return render(
     <MemoryRouter initialEntries={[opts.route ?? "/"]}>
       <AuthProvider>{ui}</AuthProvider>
@@ -1507,7 +1511,19 @@ import { jsonResponse, renderWithProviders } from "../test/utils";
 
 afterEach(() => vi.unstubAllGlobals());
 
+// The page renders <EventFeed/>, which opens a WebSocket. jsdom's WebSocket
+// would attempt a real connection, so stub it out.
+class FakeWebSocket {
+  onopen: (() => void) | null = null;
+  onmessage: ((ev: { data: string }) => void) | null = null;
+  onclose: (() => void) | null = null;
+  onerror: (() => void) | null = null;
+  send(): void {}
+  close(): void {}
+}
+
 it("renders a filtered page of events with the total", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
   renderWithProviders(<EventsPage />, {
     route: "/events",
     fetchImpl: async (url) => {
