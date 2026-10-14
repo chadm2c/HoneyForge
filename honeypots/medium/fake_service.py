@@ -30,6 +30,7 @@ log = logging.getLogger("honeyforge.medium")
 DEFAULT_TITLE = "Admin Panel"
 DEFAULT_PORT = 8080
 MAX_BODY = 8192  # bodies are never stored; keep the read bounded
+MAX_DRAIN = 65536  # when rejecting an oversized body, read at most this much
 MAX_PATH_RECORDED = 1024  # cap the recorded path so details stay small
 COOKIE_NAME = "hf_admin"
 
@@ -143,7 +144,13 @@ class _Handler(http.server.BaseHTTPRequestHandler):
     def handle_one_request(self) -> None:
         self._emitted = False
         self._last_exc = None
+        self._body_read = False
         super().handle_one_request()
+        # Drain any request body the route did not consume. Closing a socket
+        # that still holds unread data makes the peer see a connection reset
+        # instead of our response (Windows WSAECONNABORTED/10053).
+        if not self._body_read:
+            self._drain_unread_body()
         if not self._emitted and isinstance(getattr(self, "_last_exc", None), TimeoutError):
             self._record("path_probe", "unknown", {"reason": "aborted"})
 
@@ -170,7 +177,7 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         raw_path = getattr(self, "path", "")
         clean_path, has_query = _split_path(raw_path) if raw_path else ("", False)
         details = {
-            "method": getattr(self, "command", "") or "",
+            "method": _printable(getattr(self, "command", "") or "", 16),
             "path": clean_path,
             "category": category,
             "has_query": has_query,
@@ -219,12 +226,40 @@ class _Handler(http.server.BaseHTTPRequestHandler):
         if header is None:
             return b"", "missing-length"
         header = header.strip()
-        if not header.isdigit():  # reject signs, underscores, whitespace, empty
+        if not (header.isascii() and header.isdigit()):
+            # ASCII decimal only: `str.isdigit()` also accepts superscripts
+            # (e.g. "²") that `int()` rejects, and signs/underscores/empty.
             return b"", "bad-length"
         length = int(header)
         if length > MAX_BODY:
             return b"", "too-large"
+        self._body_read = True
         return (self.rfile.read(length) if length else b""), None
+
+    def _drain_body(self, length: int) -> None:
+        # Read and discard a bounded amount so the peer can finish writing.
+        # Closing a socket that still holds unread data makes the client see a
+        # connection reset instead of our response.
+        remaining = min(length, MAX_DRAIN)
+        try:
+            while remaining > 0:
+                chunk = self.rfile.read(min(remaining, 65536))
+                if not chunk:
+                    break
+                remaining -= len(chunk)
+        except (TimeoutError, OSError, ValueError):
+            pass
+
+    def _drain_unread_body(self) -> None:
+        headers = getattr(self, "headers", None)
+        if headers is None:
+            return
+        header = headers.get("Content-Length")
+        if header is None:
+            return
+        header = header.strip()
+        if header.isascii() and header.isdigit():
+            self._drain_body(int(header))
 
     # -- routing ------------------------------------------------------------
 

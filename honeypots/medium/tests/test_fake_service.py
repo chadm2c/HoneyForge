@@ -203,6 +203,31 @@ def test_bad_content_length_gets_400_with_one_event():
         assert _still_serving(decoy)
 
 
+def test_unicode_digit_content_length_gets_400_with_one_event():
+    # `str.isdigit()` is true for superscripts (e.g. 0xB2 = "²") that `int()`
+    # rejects, so a naive isdigit()/int() pair raises uncaught and drops the
+    # event. The length must be ASCII-decimal only.
+    posted = []
+    with running_decoy(on_event=posted.append) as decoy:
+        response = _send_raw(
+            decoy,
+            b"POST /login HTTP/1.0\r\nHost: x\r\nContent-Length: \xb2\r\n\r\n",
+        )
+        assert b"400" in response
+        assert len(posted) == 1
+        assert _still_serving(decoy)
+
+
+def test_unsupported_method_is_bounded_in_the_event():
+    posted = []
+    with running_decoy(on_event=posted.append) as decoy:
+        long_method = "A" * 4096
+        _send_raw(decoy, f"{long_method} / HTTP/1.0\r\nHost: x\r\n\r\n".encode())
+        assert len(posted) == 1
+        assert posted[0]["event_type"] == "path_probe"
+        assert len(posted[0]["details"]["method"]) <= 16
+
+
 def test_very_long_path_gets_one_event_and_server_survives():
     posted = []
     with running_decoy(on_event=posted.append) as decoy:
