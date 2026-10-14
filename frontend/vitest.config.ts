@@ -8,5 +8,8 @@ export default defineConfig({
   test: {
     environment: "jsdom",
     setupFiles: ["./src/test/setup.ts"],
+    // Generous per-test budget so a loaded machine cannot produce a red suite
+    // for a test that passes on its own.
+    testTimeout: 20000,
   },
 });

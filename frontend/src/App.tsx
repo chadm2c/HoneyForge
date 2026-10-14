@@ -4,8 +4,9 @@ import RequireAuth from "./auth/RequireAuth";
 import AppShell from "./components/AppShell";
 import LoginPage from "./pages/LoginPage";
 import FleetPage from "./pages/FleetPage";
+import ProfilesPage from "./pages/ProfilesPage";
 
-/** Stand-in for the pages still being built in S4 (Tasks 9–12). */
+/** Stand-in for the pages still being built in S4 (Tasks 11–12). */
 function Placeholder({ label }: { label: string }) {
   return <p className="text-sm text-slate-500">{label} — coming next in S4.</p>;
 }
@@ -23,7 +24,7 @@ export default function App() {
           }
         >
           <Route path="fleet" element={<FleetPage />} />
-          <Route path="profiles" element={<Placeholder label="Profiles" />} />
+          <Route path="profiles" element={<ProfilesPage />} />
           <Route path="events" element={<Placeholder label="Events" />} />
           <Route path="audit" element={<Placeholder label="Audit" />} />
         </Route>
