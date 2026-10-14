@@ -269,12 +269,15 @@ discussion — they are choices, not oversights.
 
 ## 11. Current focus
 
-- **Slice:** S3 implemented — Medium decoy (fake HTTP admin panel) on the same
+- **Slice:** S3 complete — Medium decoy (fake HTTP admin panel) on the same
   config/auth path as the Low decoy. It runs on its own agent (`agent-medium`,
   per-agent token, own spool) and its own `agent_medium_net`, so each decoy
   reaches only its own agent. The submitted password is absent from the event,
   the spool, the logs, and the response (verified live); the query string is
-  stripped; hostile input is bounded. Checkpoint review pending.
+  stripped; hostile input is bounded. Checkpoint review passed (`97b8713`,
+  `c94bbad`): the stdlib `send_error` no longer reflects the request line or
+  method token into the response, unsupported-method probes are recorded, and
+  unread request bodies are drained before close.
 - **Next:** S4 — operator JWT + roles, profile CRUD + version bump, fleet,
   event filters/pagination, audit logs (API and minimal UI together).
 - **Remaining before submission:** S4 control-center API/UI, TLS/encryption
