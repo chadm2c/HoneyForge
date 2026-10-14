@@ -3,6 +3,7 @@ import { AuthProvider } from "./auth/AuthContext";
 import RequireAuth from "./auth/RequireAuth";
 import AppShell from "./components/AppShell";
 import LoginPage from "./pages/LoginPage";
+import FleetPage from "./pages/FleetPage";
 
 /** Stand-in for the pages still being built in S4 (Tasks 9–12). */
 function Placeholder({ label }: { label: string }) {
@@ -21,7 +22,7 @@ export default function App() {
             </RequireAuth>
           }
         >
-          <Route path="fleet" element={<Placeholder label="Fleet" />} />
+          <Route path="fleet" element={<FleetPage />} />
           <Route path="profiles" element={<Placeholder label="Profiles" />} />
           <Route path="events" element={<Placeholder label="Events" />} />
           <Route path="audit" element={<Placeholder label="Audit" />} />

@@ -7,7 +7,6 @@ import { renderWithProviders } from "../test/utils";
 afterEach(() => vi.unstubAllGlobals());
 
 it("redirects to /login when there is no token", async () => {
-  localStorage.clear();
   renderWithProviders(
     <Routes>
       <Route
@@ -20,14 +19,13 @@ it("redirects to /login when there is no token", async () => {
       />
       <Route path="/login" element={<div>login page</div>} />
     </Routes>,
-    { route: "/fleet" },
+    { route: "/fleet", operator: null },
   );
 
   expect(await screen.findByText("login page")).toBeTruthy();
 });
 
 it("renders children once the operator is loaded", async () => {
-  localStorage.setItem("hf_token", "jwt");
   renderWithProviders(
     <Routes>
       <Route

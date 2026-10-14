@@ -32,6 +32,15 @@ export function renderWithProviders(
 ) {
   const operator = opts.operator === undefined ? DEFAULT_ADMIN : opts.operator;
 
+  // AuthProvider only calls /api/auth/me when a token is present, so the helper
+  // owns the token as well as the response: a session needs both. Passing
+  // `operator: null` therefore means "no session" and clears any token.
+  if (operator) {
+    localStorage.setItem("hf_token", "test-jwt");
+  } else {
+    localStorage.removeItem("hf_token");
+  }
+
   vi.stubGlobal(
     "fetch",
     vi.fn(async (url: string, init?: RequestInit) => {
