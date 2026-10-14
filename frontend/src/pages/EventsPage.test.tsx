@@ -109,6 +109,27 @@ it("pages forward by the page size and records the total", async () => {
   });
 });
 
+it("does not print an impossible range when the page is empty", async () => {
+  vi.stubGlobal("WebSocket", FakeWebSocket);
+  renderWithProviders(<EventsPage />, {
+    route: "/events",
+    fetchImpl: async (url) => {
+      const u = String(url);
+      if (u.includes("/api/honeypots")) return jsonResponse([]);
+      // The second page comes back empty while the total still claims rows, so
+      // the label must not read "51-50 of 120".
+      return u.includes("offset=50")
+        ? jsonResponse({ items: [], total: 120 })
+        : jsonResponse({ items: [EVENT], total: 120 });
+    },
+  });
+
+  await screen.findByText(/of 120/);
+  fireEvent.click(screen.getByRole("button", { name: /next/i }));
+
+  expect(await screen.findByText("No events")).toBeTruthy();
+});
+
 it("reveals a row's details only when asked", async () => {
   vi.stubGlobal("WebSocket", FakeWebSocket);
   renderWithProviders(<EventsPage />, {

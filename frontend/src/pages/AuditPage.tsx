@@ -168,7 +168,9 @@ export default function AuditPage() {
 
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500">
-          {total === 0
+          {/* `rows`, not `total`: an empty page past the end must not read
+              "Showing 51–50 of 120". */}
+          {rows.length === 0
             ? "No audit entries"
             : `Showing ${offset + 1}–${offset + rows.length} of ${total}`}
         </p>

@@ -243,7 +243,10 @@ export default function EventsPage() {
 
       <div className="flex items-center justify-between">
         <p className="text-xs text-slate-500">
-          {total === 0
+          {/* `rows`, not `total`: a page past the end (rows were deleted or the
+              filters narrowed) is empty even though the total is not, and
+              "Showing 51–50 of 120" is nonsense. */}
+          {rows.length === 0
             ? "No events"
             : `Showing ${offset + 1}–${offset + rows.length} of ${total}`}
         </p>

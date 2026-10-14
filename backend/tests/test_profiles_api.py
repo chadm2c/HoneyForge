@@ -69,6 +69,48 @@ def test_patch_bumps_version_and_revalidates(client, operator_factory):
     assert invalid.status_code == 422
 
 
+def test_patch_duplicate_name_is_409(client, operator_factory):
+    """Renaming onto a taken name is a conflict, not an unhandled DB error."""
+    _, _, admin = operator_factory()
+    client.post("/api/profiles", headers=auth(admin), json=_new_profile_payload())
+    other = client.post(
+        "/api/profiles", headers=auth(admin), json=_new_profile_payload({"name": "q"})
+    )
+    renamed = client.patch(
+        f"/api/profiles/{other.json()['id']}", headers=auth(admin), json={"name": "p"}
+    )
+    assert renamed.status_code == 409
+
+
+def test_patch_explicit_null_is_422_not_500(client, operator_factory):
+    """An explicit null must be rejected: it would clear a NOT NULL column."""
+    _, _, admin = operator_factory()
+    created = client.post("/api/profiles", headers=auth(admin), json=_new_profile_payload())
+    pid = created.json()["id"]
+    r = client.patch(f"/api/profiles/{pid}", headers=auth(admin), json={"name": None})
+    assert r.status_code == 422
+    # ...and the stored row is untouched (the 500 path left it half-applied).
+    assert client.get(f"/api/profiles/{pid}", headers=auth(admin)).json()["name"] == "p"
+
+
+def test_patch_and_delete_require_admin(client, operator_factory):
+    """Read-only means read-only on the whole profile surface, not just create."""
+    _, _, admin = operator_factory()
+    _, _, analyst = operator_factory(role="analyst", username="an")
+    created = client.post("/api/profiles", headers=auth(admin), json=_new_profile_payload())
+    pid = created.json()["id"]
+    assert (
+        client.patch(
+            f"/api/profiles/{pid}", headers=auth(analyst), json={"name": "nope"}
+        ).status_code
+        == 403
+    )
+    assert client.delete(f"/api/profiles/{pid}", headers=auth(analyst)).status_code == 403
+    # reads stay open to the analyst role
+    assert client.get(f"/api/profiles/{pid}", headers=auth(analyst)).status_code == 200
+    assert client.get("/api/profiles", headers=auth(analyst)).status_code == 200
+
+
 def test_delete_and_conflict_when_in_use(client, operator_factory, db):
     _, _, admin = operator_factory()
     created = client.post("/api/profiles", headers=auth(admin), json=_new_profile_payload())

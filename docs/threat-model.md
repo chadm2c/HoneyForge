@@ -100,8 +100,11 @@ documented negative checks (all fail closed).
    bcrypt verification against a dummy hash, so the timing does not differ
    either.
 5. **A registered honeypot's agent token is returned exactly once.** The center
-   stores only its HMAC hash, so the token cannot be re-read or recovered;
-   losing it means re-registering the honeypot.
+   stores only its HMAC hash, so the token cannot be re-read or recovered. A
+   dropped response therefore strands that agent: S4 has no honeypot
+   delete/rotate endpoint and names are unique, so re-registering the same name
+   returns 409 and the only recovery is a replacement registered under a
+   *different* name — which leaves the stranded row in the fleet.
 6. **No transport encryption by default.** Nginx + TLS is a stretch item. If it
    is deferred, agent↔center, operator↔backend, and decoy↔agent traffic are
    plaintext on their (internal) networks. The S6 encryption matrix must state

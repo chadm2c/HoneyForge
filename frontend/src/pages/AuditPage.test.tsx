@@ -69,6 +69,21 @@ it("sends a typed action filter to the API", async () => {
   });
 });
 
+it("does not print an impossible range when the page is empty", async () => {
+  renderWithProviders(<AuditPage />, {
+    route: "/audit",
+    fetchImpl: async (url) =>
+      String(url).includes("offset=50")
+        ? jsonResponse({ items: [], total: 120 })
+        : jsonResponse({ items: ROWS, total: 120 }),
+  });
+
+  await screen.findByText(/of 120/);
+  fireEvent.click(screen.getByRole("button", { name: /next/i }));
+
+  expect(await screen.findByText("No audit entries")).toBeTruthy();
+});
+
 it("pages forward by the page size", async () => {
   const urls: string[] = [];
   renderWithProviders(<AuditPage />, {

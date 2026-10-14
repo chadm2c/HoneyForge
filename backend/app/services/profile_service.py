@@ -70,7 +70,13 @@ def update_profile(db: Session, profile_id, patch: dict) -> Profile:
         p.name = patch["name"]
     p.version += 1
     db.add(p)
-    db.commit()
+    try:
+        db.commit()
+    except IntegrityError:
+        # Renaming onto a name another profile already holds. Rolled back so the
+        # session stays usable and the row keeps its previous state.
+        db.rollback()
+        raise HTTPException(status_code=409, detail="Profile name already exists")
     db.refresh(p)
     return p
 

@@ -38,11 +38,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         if (!cancelled) setOperator(me);
       })
       .catch(() => {
-        // A rejected /api/auth/me means the token is gone or no longer valid.
-        if (!cancelled) {
-          tokenStore.clear();
-          setOperator(null);
-        }
+        // apiFetch has already cleared the token and dispatched
+        // AUTH_EXPIRED_EVENT if the response was a 401. Any other failure
+        // (network blip, 5xx while the backend restarts) is transient, so keep
+        // the token and just drop the operator: the next load retries with it
+        // rather than forcing a fresh login.
+        if (!cancelled) setOperator(null);
       })
       .finally(() => {
         if (!cancelled) setLoading(false);

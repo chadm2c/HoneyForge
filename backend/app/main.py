@@ -11,13 +11,13 @@ from app.api.honeypots import router as honeypots_router
 from app.api.profiles import router as profiles_router
 from app.api.telemetry import router as telemetry_router
 from app.api.ws import router as ws_router
-from app.core.config import DEV_JWT_SECRET, settings
+from app.core.config import DEV_JWT_SECRETS, settings
 
 logger = logging.getLogger(__name__)
 
 
 def create_app() -> FastAPI:
-    if settings.jwt_secret == DEV_JWT_SECRET:
+    if settings.jwt_secret in DEV_JWT_SECRETS:
         logger.warning(
             "JWT_SECRET is the documented dev placeholder; set a real secret "
             "before exposing the control center."

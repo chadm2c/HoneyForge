@@ -48,6 +48,7 @@ export interface ProfileSummary {
   name: string;
   interaction_level: string;
   version: number;
+  created_at: string;
   updated_at: string;
 }
 

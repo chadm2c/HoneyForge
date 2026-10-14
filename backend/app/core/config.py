@@ -3,10 +3,19 @@ from typing import Annotated
 from pydantic import field_validator
 from pydantic_settings import BaseSettings, NoDecode, SettingsConfigDict
 
-# Documented dev placeholder. `.env.example` carries a real value; the app warns
-# (in create_app) when this one is still in use and refuses a blank secret. Kept
-# >= 32 bytes because HS256 warns on shorter HMAC keys (RFC 7518 s3.2).
-DEV_JWT_SECRET = "dev-jwt-secret-change-me-at-least-32-bytes"
+# Documented dev placeholder for JWT_SECRET. `.env.example` and
+# `docker-compose.yml` (`${JWT_SECRET:-...}`) ship this exact string, and it is
+# also the Settings default, so a stack started without a real secret warns in
+# create_app() whichever of those three paths sets it. Kept >= 32 bytes because
+# HS256 warns on shorter HMAC keys (RFC 7518 s3.2).
+DEV_JWT_SECRET = "change-me-jwt-secret-at-least-32-bytes-long"
+
+# Every spelling ever shipped as a placeholder. The older one is kept so a stale
+# `.env` written before the values were aligned cannot silently keep a published
+# signing key. tests/test_config_secrets.py holds the shipped defaults to this set.
+DEV_JWT_SECRETS = frozenset(
+    {DEV_JWT_SECRET, "dev-jwt-secret-change-me-at-least-32-bytes"}
+)
 
 
 class Settings(BaseSettings):
