@@ -186,15 +186,15 @@ export default function FleetPage() {
                 <code className="flex-1 overflow-x-auto rounded bg-slate-950 px-2 py-1 font-mono text-xs text-amber-200">
                   {registered.agent_token}
                 </code>
-                <Button
+                <button
                   type="button"
-                  variant="secondary"
                   onClick={() => {
                     void navigator.clipboard?.writeText(registered.agent_token);
                   }}
+                  className="rounded border border-amber-700 px-2 py-1 text-xs text-amber-300 hover:bg-amber-900/40"
                 >
                   Copy
-                </Button>
+                </button>
               </div>
             </div>
           )}
