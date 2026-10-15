@@ -2,13 +2,15 @@ import { useEffect, useState } from "react";
 import { listEvents, listHoneypots } from "../api/client";
 import type { AttackEvent, Honeypot } from "../api/types";
 import EventFeed from "../components/EventFeed";
+import Button from "../components/ui/Button";
+import ErrorState from "../components/ui/ErrorState";
+import Panel from "../components/ui/Panel";
+import Table, { Td, Th } from "../components/ui/Table";
 import { localToIso } from "../lib/datetime";
 
 const PAGE_SIZE = 50;
 const FIELD =
   "mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 focus:border-cyan-600 focus:outline-none";
-const TH = "py-2 pr-4 text-xs font-medium uppercase tracking-wide text-slate-500";
-const TD = "border-t border-slate-900 py-2 pr-4";
 
 interface Filters {
   honeypot_id: string;
@@ -95,7 +97,7 @@ export default function EventsPage() {
     <section className="space-y-6">
       <h2 className="text-sm font-semibold tracking-wide text-cyan-300">Events</h2>
 
-      <div className="grid grid-cols-2 gap-3 rounded border border-slate-800 bg-slate-900 p-4 md:grid-cols-3 lg:grid-cols-6">
+      <Panel className="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
         <div>
           <label htmlFor="f-honeypot" className="block text-xs text-slate-400">
             Honeypot
@@ -171,63 +173,62 @@ export default function EventsPage() {
             className={FIELD}
           />
         </div>
-      </div>
+      </Panel>
 
-      {error && (
-        <p role="alert" className="text-xs text-red-400">
-          {error}
-        </p>
-      )}
+      {error && <ErrorState>{error}</ErrorState>}
 
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left text-sm">
+        <Table>
           <thead>
             <tr>
-              <th className={TH}>Occurred</th>
-              <th className={TH}>Type</th>
-              <th className={TH}>Protocol</th>
-              <th className={TH}>Source</th>
-              <th className={TH}>Target</th>
-              <th className={TH}>Honeypot</th>
-              <th className={TH} />
+              <Th>Occurred</Th>
+              <Th>Type</Th>
+              <Th>Protocol</Th>
+              <Th>Source</Th>
+              <Th>Target</Th>
+              <Th>Honeypot</Th>
+              <Th />
             </tr>
           </thead>
           <tbody>
             {rows.map((e) => (
               <tr key={e.id}>
-                <td className={`${TD} font-mono text-xs text-slate-400`}>
+                <Td className="font-mono text-xs text-slate-400">
                   {new Date(e.occurred_at).toISOString()}
-                </td>
-                <td className={`${TD} font-medium text-slate-200`}>{e.event_type}</td>
-                <td className={`${TD} text-slate-400`}>{e.protocol.toUpperCase()}</td>
-                <td className={`${TD} font-mono text-xs text-slate-300`}>
+                </Td>
+                <Td className="font-medium text-slate-200">{e.event_type}</Td>
+                <Td className="text-slate-400">{e.protocol.toUpperCase()}</Td>
+                <Td className="font-mono text-xs text-slate-300">
                   {e.source_ip ?? "—"}
                   {e.source_port === null ? "" : `:${e.source_port}`}
-                </td>
-                <td className={`${TD} font-mono text-xs text-slate-400`}>
+                </Td>
+                <Td className="font-mono text-xs text-slate-400">
                   {e.target_port ?? "—"}
-                </td>
-                <td className={`${TD} text-slate-400`}>{honeypotName(e.honeypot_id)}</td>
-                <td className={`${TD} text-right`}>
-                  <button
+                </Td>
+                <Td className="text-slate-400">{honeypotName(e.honeypot_id)}</Td>
+                <Td className="text-right">
+                  <Button
                     type="button"
+                    variant="secondary"
                     onClick={() => setSelected(selected === e.id ? null : e.id)}
-                    className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-300 hover:border-cyan-700 hover:text-cyan-300"
                   >
                     {selected === e.id ? "Hide" : "Details"}
-                  </button>
-                </td>
+                  </Button>
+                </Td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td className={`${TD} text-slate-500`} colSpan={7}>
+                <td
+                  className="border-t border-slate-900 py-2 pr-4 text-slate-500"
+                  colSpan={7}
+                >
                   {loading ? "Loading…" : "No events match these filters."}
                 </td>
               </tr>
             )}
           </tbody>
-        </table>
+        </Table>
       </div>
 
       {rows
@@ -251,22 +252,22 @@ export default function EventsPage() {
             : `Showing ${offset + 1}–${offset + rows.length} of ${total}`}
         </p>
         <div className="flex gap-2">
-          <button
+          <Button
             type="button"
+            variant="secondary"
             disabled={offset === 0}
             onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-            className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:border-cyan-700 disabled:opacity-40"
           >
             Previous
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="secondary"
             disabled={offset + rows.length >= total}
             onClick={() => setOffset(offset + PAGE_SIZE)}
-            className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:border-cyan-700 disabled:opacity-40"
           >
             Next
-          </button>
+          </Button>
         </div>
       </div>
 

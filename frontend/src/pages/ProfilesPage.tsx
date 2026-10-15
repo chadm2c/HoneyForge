@@ -10,11 +10,15 @@ import {
 } from "../api/client";
 import type { Profile, ProfileSummary } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
+import Button from "../components/ui/Button";
+import EmptyState from "../components/ui/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
+import LoadingText from "../components/ui/LoadingText";
+import Panel from "../components/ui/Panel";
+import Table, { Td, Th } from "../components/ui/Table";
 
 const FIELD =
   "mt-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 focus:border-cyan-600 focus:outline-none";
-const TH = "py-2 pr-4 text-xs font-medium uppercase tracking-wide text-slate-500";
-const TD = "border-t border-slate-900 py-2 pr-4";
 
 interface FormState {
   name: string;
@@ -167,201 +171,189 @@ export default function ProfilesPage() {
           Profiles
         </h2>
         {isAdmin && (
-          <button
-            type="button"
-            onClick={openCreate}
-            className="rounded bg-cyan-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-600"
-          >
+          <Button type="button" variant="primary" onClick={openCreate}>
             New profile
-          </button>
+          </Button>
         )}
       </div>
 
-      {error && (
-        <p role="alert" className="text-xs text-red-400">
-          {error}
-        </p>
-      )}
+      {error && <ErrorState>{error}</ErrorState>}
 
       {showForm && isAdmin && (
-        <form
-          onSubmit={onSubmit}
-          className="rounded border border-slate-800 bg-slate-900 p-4"
-        >
-          <h3 className="text-xs font-semibold tracking-wide text-cyan-300">
-            {editingId ? "Edit profile" : "New profile"}
-          </h3>
-          <div className="mt-3 flex flex-wrap items-end gap-3">
-            <div>
-              <label htmlFor="pf-name" className="block text-xs text-slate-400">
-                Name
-              </label>
-              <input
-                id="pf-name"
-                value={form.name}
-                onChange={(e) => setForm({ ...form, name: e.target.value })}
-                className={FIELD}
-              />
-            </div>
-            <div>
-              <label htmlFor="pf-level" className="block text-xs text-slate-400">
-                Interaction level
-              </label>
-              <select
-                id="pf-level"
-                value={form.level}
-                onChange={(e) => setForm({ ...form, level: e.target.value })}
-                className={FIELD}
-              >
-                <option value="low">low</option>
-                <option value="medium">medium</option>
-              </select>
-            </div>
-            <div>
-              <label htmlFor="pf-ports" className="block text-xs text-slate-400">
-                Ports (comma separated)
-              </label>
-              <input
-                id="pf-ports"
-                value={form.ports}
-                onChange={(e) => setForm({ ...form, ports: e.target.value })}
-                className={FIELD}
-              />
-            </div>
-
-            {form.level === "medium" ? (
-              <>
-                <div>
-                  <label
-                    htmlFor="pf-title"
-                    className="block text-xs text-slate-400"
-                  >
-                    Page title
-                  </label>
-                  <input
-                    id="pf-title"
-                    value={form.title}
-                    onChange={(e) => setForm({ ...form, title: e.target.value })}
-                    className={FIELD}
-                  />
-                </div>
-                <label className="flex items-center gap-2 py-1 text-xs text-slate-400">
-                  <input
-                    type="checkbox"
-                    checked={form.loginEnabled}
-                    onChange={(e) =>
-                      setForm({ ...form, loginEnabled: e.target.checked })
-                    }
-                  />
-                  Login page enabled
-                </label>
-              </>
-            ) : (
+        <Panel title={editingId ? "Edit profile" : "New profile"}>
+          <form onSubmit={onSubmit}>
+            <div className="mt-3 flex flex-wrap items-end gap-3">
               <div>
-                <label
-                  htmlFor="pf-banner"
-                  className="block text-xs text-slate-400"
-                >
-                  Banner
+                <label htmlFor="pf-name" className="block text-xs text-slate-400">
+                  Name
                 </label>
                 <input
-                  id="pf-banner"
-                  value={form.banner}
-                  onChange={(e) => setForm({ ...form, banner: e.target.value })}
+                  id="pf-name"
+                  value={form.name}
+                  onChange={(e) => setForm({ ...form, name: e.target.value })}
                   className={FIELD}
                 />
               </div>
-            )}
+              <div>
+                <label htmlFor="pf-level" className="block text-xs text-slate-400">
+                  Interaction level
+                </label>
+                <select
+                  id="pf-level"
+                  value={form.level}
+                  onChange={(e) => setForm({ ...form, level: e.target.value })}
+                  className={FIELD}
+                >
+                  <option value="low">low</option>
+                  <option value="medium">medium</option>
+                </select>
+              </div>
+              <div>
+                <label htmlFor="pf-ports" className="block text-xs text-slate-400">
+                  Ports (comma separated)
+                </label>
+                <input
+                  id="pf-ports"
+                  value={form.ports}
+                  onChange={(e) => setForm({ ...form, ports: e.target.value })}
+                  className={FIELD}
+                />
+              </div>
 
-            <button
-              type="submit"
-              disabled={busy || !form.name}
-              className="rounded bg-cyan-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-60"
-            >
-              {busy ? "Saving…" : "Save"}
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setShowForm(false);
-                setEditingId(null);
-              }}
-              className="rounded border border-slate-700 px-3 py-1.5 text-sm text-slate-300 hover:border-cyan-700"
-            >
-              Cancel
-            </button>
-          </div>
-        </form>
+              {form.level === "medium" ? (
+                <>
+                  <div>
+                    <label
+                      htmlFor="pf-title"
+                      className="block text-xs text-slate-400"
+                    >
+                      Page title
+                    </label>
+                    <input
+                      id="pf-title"
+                      value={form.title}
+                      onChange={(e) => setForm({ ...form, title: e.target.value })}
+                      className={FIELD}
+                    />
+                  </div>
+                  <label className="flex items-center gap-2 py-1 text-xs text-slate-400">
+                    <input
+                      type="checkbox"
+                      checked={form.loginEnabled}
+                      onChange={(e) =>
+                        setForm({ ...form, loginEnabled: e.target.checked })
+                      }
+                    />
+                    Login page enabled
+                  </label>
+                </>
+              ) : (
+                <div>
+                  <label
+                    htmlFor="pf-banner"
+                    className="block text-xs text-slate-400"
+                  >
+                    Banner
+                  </label>
+                  <input
+                    id="pf-banner"
+                    value={form.banner}
+                    onChange={(e) => setForm({ ...form, banner: e.target.value })}
+                    className={FIELD}
+                  />
+                </div>
+              )}
+
+              <Button type="submit" variant="primary" disabled={busy || !form.name}>
+                {busy ? "Saving…" : "Save"}
+              </Button>
+              <Button
+                type="button"
+                variant="secondary"
+                onClick={() => {
+                  setShowForm(false);
+                  setEditingId(null);
+                }}
+              >
+                Cancel
+              </Button>
+            </div>
+          </form>
+        </Panel>
       )}
 
       {profiles.length === 0 ? (
-        <p className="text-sm text-slate-500">
-          {loading ? "Loading…" : "No profiles defined yet."}
-        </p>
+        loading ? (
+          <LoadingText />
+        ) : (
+          <EmptyState>No profiles defined yet.</EmptyState>
+        )
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
+          <Table>
             <thead>
               <tr>
-                <th className={TH}>Name</th>
-                <th className={TH}>Level</th>
-                <th className={TH}>Version</th>
-                <th className={TH}>Updated</th>
-                {isAdmin && <th className={TH}>Actions</th>}
+                <Th>Name</Th>
+                <Th>Level</Th>
+                <Th>Version</Th>
+                <Th>Updated</Th>
+                {isAdmin && <Th>Actions</Th>}
               </tr>
             </thead>
             <tbody>
               {profiles.map((p) => (
                 <tr key={p.id}>
-                  <td className={`${TD} font-medium text-slate-200`}>{p.name}</td>
-                  <td className={`${TD} text-slate-400`}>{p.interaction_level}</td>
-                  <td className={`${TD} font-mono text-xs text-slate-400`}>
+                  <Td className="font-medium text-slate-200">{p.name}</Td>
+                  <Td className="text-slate-400">{p.interaction_level}</Td>
+                  <Td className="font-mono text-xs text-slate-400">
                     v{p.version}
-                  </td>
-                  <td className={`${TD} font-mono text-xs text-slate-400`}>
+                  </Td>
+                  <Td className="font-mono text-xs text-slate-400">
                     {new Date(p.updated_at).toISOString()}
-                  </td>
+                  </Td>
                   {isAdmin && (
-                    <td className={`${TD} whitespace-nowrap`}>
-                      <button
+                    <Td className="whitespace-nowrap">
+                      <Button
                         type="button"
+                        variant="secondary"
+                        className="mr-2"
                         onClick={() => void openEdit(p.id)}
-                        className="mr-2 rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-300 hover:border-cyan-700 hover:text-cyan-300"
                       >
                         Edit
-                      </button>
+                      </Button>
                       {confirmId === p.id ? (
                         <>
-                          <button
+                          <Button
                             type="button"
+                            variant="danger"
+                            className="mr-2"
                             onClick={() => void onDelete(p.id)}
-                            className="mr-2 rounded border border-red-800 px-2 py-0.5 text-xs text-red-300 hover:bg-red-950"
                           >
                             Confirm delete
-                          </button>
-                          <button
+                          </Button>
+                          <Button
                             type="button"
+                            variant="secondary"
                             onClick={() => setConfirmId(null)}
-                            className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-300"
                           >
                             Cancel
-                          </button>
+                          </Button>
                         </>
                       ) : (
-                        <button
+                        <Button
                           type="button"
+                          variant="secondary"
                           onClick={() => setConfirmId(p.id)}
-                          className="rounded border border-slate-700 px-2 py-0.5 text-xs text-slate-300 hover:border-red-800 hover:text-red-300"
                         >
                           Delete
-                        </button>
+                        </Button>
                       )}
-                    </td>
+                    </Td>
                   )}
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         </div>
       )}
     </section>

@@ -1,13 +1,15 @@
 import { useEffect, useState } from "react";
 import { listAuditLogs } from "../api/client";
 import type { AuditLog } from "../api/types";
+import Button from "../components/ui/Button";
+import ErrorState from "../components/ui/ErrorState";
+import Panel from "../components/ui/Panel";
+import Table, { Td, Th } from "../components/ui/Table";
 import { localToIso } from "../lib/datetime";
 
 const PAGE_SIZE = 50;
 const FIELD =
   "mt-1 w-full rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 focus:border-cyan-600 focus:outline-none";
-const TH = "py-2 pr-4 text-xs font-medium uppercase tracking-wide text-slate-500";
-const TD = "border-t border-slate-900 py-2 pr-4";
 
 interface Filters {
   action: string;
@@ -72,7 +74,7 @@ export default function AuditPage() {
         Audit log
       </h2>
 
-      <div className="grid grid-cols-2 gap-3 rounded border border-slate-800 bg-slate-900 p-4 md:grid-cols-4">
+      <Panel className="grid grid-cols-2 gap-3 md:grid-cols-4">
         <div>
           <label htmlFor="a-action" className="block text-xs text-slate-400">
             Action
@@ -119,51 +121,50 @@ export default function AuditPage() {
             className={FIELD}
           />
         </div>
-      </div>
+      </Panel>
 
-      {error && (
-        <p role="alert" className="text-xs text-red-400">
-          {error}
-        </p>
-      )}
+      {error && <ErrorState>{error}</ErrorState>}
 
       <div className="overflow-x-auto">
-        <table className="w-full border-collapse text-left text-sm">
+        <Table>
           <thead>
             <tr>
-              <th className={TH}>When</th>
-              <th className={TH}>Action</th>
-              <th className={TH}>Resource</th>
-              <th className={TH}>Resource id</th>
-              <th className={TH}>Operator</th>
+              <Th>When</Th>
+              <Th>Action</Th>
+              <Th>Resource</Th>
+              <Th>Resource id</Th>
+              <Th>Operator</Th>
             </tr>
           </thead>
           <tbody>
             {rows.map((row) => (
               <tr key={row.id}>
-                <td className={`${TD} font-mono text-xs text-slate-400`}>
+                <Td className="font-mono text-xs text-slate-400">
                   {new Date(row.created_at).toISOString()}
-                </td>
-                <td className={`${TD} font-medium text-slate-200`}>{row.action}</td>
-                <td className={`${TD} text-slate-400`}>{row.resource_type}</td>
-                <td className={`${TD} font-mono text-xs text-slate-400`}>
+                </Td>
+                <Td className="font-medium text-slate-200">{row.action}</Td>
+                <Td className="text-slate-400">{row.resource_type}</Td>
+                <Td className="font-mono text-xs text-slate-400">
                   {row.resource_id ?? "—"}
-                </td>
-                <td className={`${TD} text-slate-400`}>
+                </Td>
+                <Td className="text-slate-400">
                   {/* A failed login has no operator to attribute the row to. */}
                   {row.operator_id ?? "system"}
-                </td>
+                </Td>
               </tr>
             ))}
             {rows.length === 0 && (
               <tr>
-                <td className={`${TD} text-slate-500`} colSpan={5}>
+                <td
+                  className="border-t border-slate-900 py-2 pr-4 text-slate-500"
+                  colSpan={5}
+                >
                   {loading ? "Loading…" : "No audit entries match these filters."}
                 </td>
               </tr>
             )}
           </tbody>
-        </table>
+        </Table>
       </div>
 
       <div className="flex items-center justify-between">
@@ -175,22 +176,22 @@ export default function AuditPage() {
             : `Showing ${offset + 1}–${offset + rows.length} of ${total}`}
         </p>
         <div className="flex gap-2">
-          <button
+          <Button
             type="button"
+            variant="secondary"
             disabled={offset === 0}
             onClick={() => setOffset(Math.max(0, offset - PAGE_SIZE))}
-            className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:border-cyan-700 disabled:opacity-40"
           >
             Previous
-          </button>
-          <button
+          </Button>
+          <Button
             type="button"
+            variant="secondary"
             disabled={offset + rows.length >= total}
             onClick={() => setOffset(offset + PAGE_SIZE)}
-            className="rounded border border-slate-700 px-3 py-1 text-xs text-slate-300 hover:border-cyan-700 disabled:opacity-40"
           >
             Next
-          </button>
+          </Button>
         </div>
       </div>
     </section>

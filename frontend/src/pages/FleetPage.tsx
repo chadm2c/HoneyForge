@@ -4,11 +4,15 @@ import { listHoneypots, listProfiles, registerHoneypot } from "../api/client";
 import type { Honeypot, HoneypotRegistered, ProfileSummary } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import FleetStatusBadge from "../components/FleetStatusBadge";
+import Button from "../components/ui/Button";
+import EmptyState from "../components/ui/EmptyState";
+import ErrorState from "../components/ui/ErrorState";
+import LoadingText from "../components/ui/LoadingText";
+import Panel from "../components/ui/Panel";
+import Table, { Td, Th } from "../components/ui/Table";
 
 const FIELD =
   "mt-1 rounded border border-slate-700 bg-slate-950 px-2 py-1 text-sm text-slate-100 focus:border-cyan-600 focus:outline-none";
-const TH = "py-2 pr-4 text-xs font-medium uppercase tracking-wide text-slate-500";
-const TD = "border-t border-slate-900 py-2 pr-4";
 
 function lastSeen(value: string | null): string {
   return value ? new Date(value).toISOString() : "—";
@@ -84,60 +88,55 @@ export default function FleetPage() {
         </p>
       </div>
 
-      {error && (
-        <p role="alert" className="text-xs text-red-400">
-          {error}
-        </p>
-      )}
+      {error && <ErrorState>{error}</ErrorState>}
 
       {honeypots.length === 0 ? (
-        <p className="text-sm text-slate-500">
-          {loading ? "Loading…" : "No honeypots registered yet."}
-        </p>
+        loading ? (
+          <LoadingText />
+        ) : (
+          <EmptyState>No honeypots registered yet.</EmptyState>
+        )
       ) : (
         <div className="overflow-x-auto">
-          <table className="w-full border-collapse text-left text-sm">
+          <Table>
             <thead>
               <tr>
-                <th className={TH}>Name</th>
-                <th className={TH}>Level</th>
-                <th className={TH}>Status</th>
-                <th className={TH}>Last seen</th>
-                <th className={TH}>Profile</th>
-                <th className={TH}>Config</th>
+                <Th>Name</Th>
+                <Th>Level</Th>
+                <Th>Status</Th>
+                <Th>Last seen</Th>
+                <Th>Profile</Th>
+                <Th>Config</Th>
               </tr>
             </thead>
             <tbody>
               {honeypots.map((hp) => (
                 <tr key={hp.id}>
-                  <td className={`${TD} font-medium text-slate-200`}>{hp.name}</td>
-                  <td className={`${TD} text-slate-400`}>
+                  <Td className="font-medium text-slate-200">{hp.name}</Td>
+                  <Td className="text-slate-400">
                     {hp.profile.interaction_level}
-                  </td>
-                  <td className={TD}>
+                  </Td>
+                  <Td>
                     <FleetStatusBadge status={hp.status} />
-                  </td>
-                  <td className={`${TD} font-mono text-xs text-slate-400`}>
+                  </Td>
+                  <Td className="font-mono text-xs text-slate-400">
                     {lastSeen(hp.last_seen_at)}
-                  </td>
-                  <td className={`${TD} text-slate-400`}>
+                  </Td>
+                  <Td className="text-slate-400">
                     {hp.profile.name} v{hp.profile.version}
-                  </td>
-                  <td className={`${TD} font-mono text-xs text-slate-400`}>
+                  </Td>
+                  <Td className="font-mono text-xs text-slate-400">
                     {hp.config_version}
-                  </td>
+                  </Td>
                 </tr>
               ))}
             </tbody>
-          </table>
+          </Table>
         </div>
       )}
 
       {isAdmin && (
-        <div className="rounded border border-slate-800 bg-slate-900 p-4">
-          <h3 className="text-xs font-semibold tracking-wide text-cyan-300">
-            Register honeypot
-          </h3>
+        <Panel title="Register honeypot">
           <form onSubmit={onRegister} className="mt-3 flex flex-wrap items-end gap-3">
             <div>
               <label htmlFor="hp-name" className="block text-xs text-slate-400">
@@ -168,13 +167,13 @@ export default function FleetPage() {
                 ))}
               </select>
             </div>
-            <button
+            <Button
               type="submit"
+              variant="primary"
               disabled={busy || !name || !profileId}
-              className="rounded bg-cyan-700 px-3 py-1.5 text-sm font-medium text-white hover:bg-cyan-600 disabled:opacity-60"
             >
               {busy ? "Registering…" : "Register"}
-            </button>
+            </Button>
           </form>
 
           {registered && (
@@ -187,19 +186,19 @@ export default function FleetPage() {
                 <code className="flex-1 overflow-x-auto rounded bg-slate-950 px-2 py-1 font-mono text-xs text-amber-200">
                   {registered.agent_token}
                 </code>
-                <button
+                <Button
                   type="button"
+                  variant="secondary"
                   onClick={() => {
                     void navigator.clipboard?.writeText(registered.agent_token);
                   }}
-                  className="rounded border border-amber-700 px-2 py-1 text-xs text-amber-300 hover:bg-amber-900/40"
                 >
                   Copy
-                </button>
+                </Button>
               </div>
             </div>
           )}
-        </div>
+        </Panel>
       )}
     </section>
   );
