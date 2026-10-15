@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listEvents, listHoneypots } from "../api/client";
 import type { AttackEvent, Honeypot } from "../api/types";
+import EventDetail from "../components/EventDetail";
 import EventFeed from "../components/EventFeed";
 import Button from "../components/ui/Button";
 import ErrorState from "../components/ui/ErrorState";
@@ -234,12 +235,11 @@ export default function EventsPage() {
       {rows
         .filter((e) => e.id === selected)
         .map((e) => (
-          <pre
+          <EventDetail
             key={e.id}
-            className="overflow-x-auto rounded border border-slate-800 bg-slate-900 p-3 font-mono text-xs text-slate-300"
-          >
-            {JSON.stringify(e.details, null, 2)}
-          </pre>
+            event={e}
+            honeypotName={honeypotName(e.honeypot_id)}
+          />
         ))}
 
       <div className="flex items-center justify-between">

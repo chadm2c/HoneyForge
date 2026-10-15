@@ -145,5 +145,6 @@ it("reveals a row's details only when asked", async () => {
 
   fireEvent.click(await screen.findByRole("button", { name: /details/i }));
 
-  expect(await screen.findByText(/"username"/)).toBeTruthy();
+  expect(await screen.findByText("Occurred at")).toBeTruthy();
+  expect(await screen.findByText("admin")).toBeTruthy();
 });
