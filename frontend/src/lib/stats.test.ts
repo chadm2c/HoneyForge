@@ -174,6 +174,20 @@ describe("bucketByHour", () => {
     expect(buckets[23].count).toBe(1);
   });
 
+  it("anchors buckets to the window, never to wall-clock HH:00", () => {
+    // Off-hour anchor: a clock-flooring implementation would emit `04:00:00.000Z`
+    // as buckets[0] and fail the not-on-the-hour assertion below.
+    const offHour: Window = {
+      startIso: iso(Date.UTC(2026, 0, 2, 3, 37, 0)),
+      endIso: iso(Date.UTC(2026, 0, 3, 3, 37, 0)),
+    };
+    const buckets = bucketByHour([], offHour);
+    expect(buckets).toHaveLength(24);
+    expect(buckets[0].startIso).toBe(offHour.startIso);
+    expect(buckets[0].startIso).not.toMatch(/T\d{2}:00:00\.000Z$/);
+    expect(buckets[23].endIso).toBe(offHour.endIso);
+  });
+
   // edges: an event in the first and in the last (just before end) bucket both land correctly
   it("buckets the first- and last-bucket edge events correctly", () => {
     const buckets = bucketByHour(
@@ -269,6 +283,15 @@ describe("distinctSourceCount", () => {
     ];
     expect(distinctSourceCount(events)).toEqual({ distinct: 2, unattributed: 2 });
     expect(distinctSourceCount([])).toEqual({ distinct: 0, unattributed: 0 });
+  });
+
+  it("treats an omitted source_ip key as unattributed, not as a source", () => {
+    const omitted = { ...ev("6", iso(START_MS + 6)) };
+    delete (omitted as Partial<AttackEvent>).source_ip;
+    expect(omitted).not.toHaveProperty("source_ip");
+    expect(
+      distinctSourceCount([omitted, ev("7", iso(START_MS + 7), { source_ip: "203.0.113.5" })]),
+    ).toEqual({ distinct: 1, unattributed: 1 });
   });
 });
 

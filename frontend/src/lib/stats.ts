@@ -185,7 +185,8 @@ export function distinctSourceCount(inWindow: AttackEvent[]): {
   const sources = new Set<string>();
   let unattributed = 0;
   for (const e of inWindow) {
-    if (e.source_ip === null) unattributed++;
+    // `==` catches both explicit null and an omitted key in serialized JSON.
+    if (e.source_ip == null) unattributed++;
     else sources.add(e.source_ip);
   }
   return { distinct: sources.size, unattributed };
