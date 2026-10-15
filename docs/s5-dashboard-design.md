@@ -65,7 +65,7 @@ verifiable / demoable).
   numbers on the page can describe different intervals.
 - In-place detail panels: structured event detail on `EventsPage`; honeypot
   detail on `FleetPage` via the existing `GET /api/honeypots/{id}`.
-- WebSocket hardening: jitter, bounded buffer, offset-advanced gap-fill,
+- WebSocket hardening: jitter, bounded buffer, checkpoint-anchored gap-fill,
   tri-state status.
 - A bounded theme consistency pass via shared UI primitives.
 - Expanded frontend tests for every item above.
@@ -92,10 +92,10 @@ verifiable / demoable).
 | Chart | Hand-rolled inline SVG; **zero new dependencies** |
 | Detail views | In-place panels; **no new routes** |
 | Theme polish | Bounded consistency pass: extract shared primitives, adopt across pages, **no rendered text/role changes** |
-| Reconnect | Harden the existing hook (jitter, cap, offset-advanced gap-fill, tri-state) |
+| Reconnect | Harden the existing hook (jitter, cap, checkpoint-anchored gap-fill, tri-state) |
 | Reporting interval | One half-open `[start, end)` window per derivation pass; client-enforced exclusive end (§6) |
 | Event merge | One canonical `mergeById` derivation; the REST sample and the live buffer stay in separate, single-owner state cells (§7.1) |
-| Recovery completeness | Reported separately from connection state via `gapFill`; never claimed when capped or failed (§11.3) |
+| Recovery completeness | Reported separately from connection state — the hook's `gapFill` and the overview's `recovery`; never claimed when capped or failed (§11.3, §7.3) |
 | Spec location | `docs/s5-dashboard-design.md` (tracked, matching the S4 convention) |
 
 ## 5. Routes and navigation
@@ -284,9 +284,16 @@ The REST sample and the WebSocket deliver events concurrently. The rules:
   `ORDER BY` and making same-timestamp ties deterministic (the current client sort
   has no tie-break).
 - **Recovery:** on `reconnecting → live`, refetch the window (a fresh pass with a
-  fresh `now`). The response replaces `sample` only; live events arriving during
-  the refetch are preserved, and id-dedupe absorbs the overlap. No state is
-  cleared, so a failed refetch degrades to "stale sample" rather than "empty page".
+  fresh `now`). This is the Overview's **own** reconciliation — the hook performs
+  none when `manageHistory: false` (§11.1) — and it is a *different, larger* path
+  than the hook's single-page gap-fill: it pages the window at
+  `offset = 0, 200, 400` (**at most 3 requests, ≤ 600 events, never a fourth**) and
+  sets `recovery` to `"complete"` on a short page, `"capped"` when all three pages
+  are full, `"failed"` on error. The response replaces `sample` only; live events
+  arriving during the refetch are preserved, and id-dedupe absorbs the overlap. No
+  state is cleared, so a failed refetch degrades to "stale sample" rather than
+  "empty page", and a capped refetch also makes the disclosure's `truncated` flag
+  true (§6.1).
 - No polling timer and no state-management library. The socket is the update
   mechanism; the recovery refetch is the reconciliation.
 
@@ -328,7 +335,7 @@ interface OverviewResult {
   eventsLoading: boolean
   eventsError: string | null
   status: ConnectionStatus    // from the hook (§11.1)
-  gapFill: GapFillState       // from the hook (§11.3)
+  recovery: GapFillState      // the Overview's own reconciliation (§7.3)
 }
 ```
 
@@ -437,44 +444,86 @@ while spreading simultaneous clients; the cap is 30s. The attempt counter resets
 a successful open. A pending timer is cancelled on dispose — no timer outlives the
 hook, and a post-dispose resolution can never call `setState`.
 
-### 11.3 Gap-fill: deterministic, offset-advanced, bounded (Correction B)
+### 11.3 Recovery: a disconnection checkpoint, one bounded request (Correction B)
 
-The gap is everything the socket missed while it was down. The recovery fetch must
-**advance `offset` on each page** — repeating the same `since`/`limit` would return
-the same first page forever.
+**The checkpoint.** Recovery must cover the interval the socket actually missed.
+The checkpoint is the **newest `occurred_at` held as of the last moment the socket
+was live** — the newest event received *before* the drop. It is maintained in a ref
+(`checkpointRef`) from every merge and every live append, and it is **snapshotted
+synchronously at the top of `socket.onopen`, before the handshake is sent and
+before any post-reconnect frame can be processed.**
 
-Algorithm, run on every open when `manageHistory` is true:
+**Why "the newest held event at fetch time" is wrong.** That value is evaluated
+when the recovery fetch is *issued*, which can be after the server has already
+pushed fresh events over the new socket. Those events are newer than everything
+created during the outage, so an anchor taken from them would **skip the whole
+outage**:
 
-1. **Anchor.** Let `anchor` = the newest held event's `occurred_at`. If no events
-   are held, fetch the initial window instead (`GET /api/events?limit=<BUFFER_LIMIT>`,
-   dedupe, done). Otherwise set `since = anchor − 1s`.
-   *Why the overlap:* the API's `since` is inclusive and its ordering is
-   `occurred_at desc, id desc`, so `since = anchor` already re-includes `anchor`
-   and its same-timestamp ties. The extra second is a margin for representation
-   differences between the parsed client value (ms) and the stored server value
-   (µs). Over-fetching is free because step 4 dedupes by id.
-2. **Page.** For `page = 0, 1, 2` (max 3 pages, unchanged budget):
-   `GET /api/events?since=<since>&limit=<BUFFER_LIMIT>&offset=<page · BUFFER_LIMIT>`.
-3. **Terminate** when any of:
-   - a page returned fewer than `BUFFER_LIMIT` items (a short page — the end);
-   - the 3-page budget is exhausted → `gapFill = "capped"`;
-   - a request fails → `gapFill = "failed"`, held events preserved.
-4. **Dedupe and merge without dropping.** Collect the pages into one list, then
+```
+ outage start        outage: M1..Mn created            reconnect
+      |-----------------------|----------------------------|
+ checkpoint = newest held     missed interval = (checkpoint, now]
+       (pre-drop)             recovered via since = checkpoint − 1s
+
+ live L1,L2 arriving after reconnect are newer than Mn and must NOT move the
+ anchor; the merge preserves them, but it must not scope the query.
+```
+
+Snapshotting the pre-drop newest is exactly what makes the anchor cover the gap.
+Nothing can be processed between `onopen` firing and its synchronous first
+statement, so the snapshot cannot be raced by a live frame.
+
+**The overlap.** `since = checkpoint.occurred_at − 1s`. `since` is inclusive
+(`>=`) and ordering is `occurred_at desc, id desc`, so `checkpoint.occurred_at`
+alone already re-covers the checkpoint event and every event sharing its timestamp
+(the tie group). The extra second covers two real cases: the client parses
+`occurred_at` to milliseconds while Postgres stores microseconds (truncation is
+safe, but the margin removes all doubt), and an event created an instant before
+the checkpoint whose frame was lost in the drop and therefore never entered the
+buffer. Over-fetching is free because step 4 dedupes by id. Events older than
+`checkpoint − 1s` are outside the recovery scope (§15.3).
+
+**The request.** The buffer retains at most `BUFFER_LIMIT` (200) events, so
+recovery needs exactly one page:
+
+1. **Anchor.** If `checkpointRef` is null (first connect, nothing held), fetch the
+   initial page `GET /api/events?limit=<BUFFER_LIMIT>`, dedupe and stop; there is
+   no gap and `gapFill = "none"`. Otherwise `since = checkpoint − 1s`.
+2. **Fetch.** `GET /api/events?since=<since>&limit=<BUFFER_LIMIT>&offset=0`.
+3. **Terminate.** The response carries `total` for the filter scope, so completeness
+   is decidable: a short page (fewer than `BUFFER_LIMIT` items, including zero), **or
+   `total ≤ BUFFER_LIMIT`** (we hold the whole missed set), → `gapFill = "complete"`.
+   Only a full page with `total > BUFFER_LIMIT` → `gapFill = "capped"`: more missed
+   events exist than the buffer can hold. Using `total` avoids mislabelling an
+   exact-`BUFFER_LIMIT` recovery as capped.
+4. **Dedupe and merge without dropping.**
    `setEvents(prev => cap(mergeById(prev, recovered)))` — a **functional update**,
-   so events appended by the socket *during* recovery are preserved, never
-   overwritten. `mergeById` dedupes across REST pages, the overlap range, and
-   buffered live frames.
-5. **Report.** `gapFill = "complete"` when a short page (or an empty first page)
-   ended the loop; `"capped"` when the budget ran out; `"failed"` on error.
-   Because ordering is newest-first, a capped recovery holds the **newest**
-   `3 × 200` events — the most useful 600 — not the oldest.
+   so frames appended by the socket *during* the fetch are preserved, never
+   overwritten. `mergeById` dedupes across the page, the overlap range, and live
+   frames.
+5. **Failure.** A rejected request preserves held events and sets
+   `gapFill = "failed"`; `status` still becomes `live` when the socket opens.
 
-**What this does not guarantee.** Offset pagination against a live table can still
-miss events: concurrent inserts shift rows down between pages, so a row can move
-from beyond page 1 into page 1 *after* page 1 was read. Duplicates are eliminated
-by id-dedupe; **skips cannot be, with this API.** A capped or failed recovery is
-therefore explicitly incomplete, and the hook says so through `gapFill` (§11.5)
-rather than pretending otherwise.
+**Exactly one request — never four.** Ordering is newest-first and the buffer keeps
+the **newest** events, so page 0 already contains everything the buffer will
+retain; a second page could only return events that step 4 would immediately trim
+away. The loop is nevertheless written to the approved ceiling — it advances
+`offset` by `RECOVERY_PAGE_SIZE` and stops at
+`min(RECOVERY_MAX_PAGES, ceil(BUFFER_LIMIT / RECOVERY_PAGE_SIZE))` — so it stays
+correct if the retention bound is ever raised. With today's
+`RECOVERY_PAGE_SIZE = BUFFER_LIMIT = 200` the effective bound is **one request,
+200 events**: there is no `offset=200`, `offset=400` or `offset=600` request on
+this path. (An earlier draft expected a fourth request at `offset=600`; that
+contradicted a three-page cap and is corrected in §14.)
+
+**Single query ⇒ no page-shift skips.** One request is one consistent statement,
+so concurrent inserts cannot move rows out from under a page walk. The skip risk
+that affects offset pagination exists only on the Overview's multi-page
+reconciliation (§7.3, §15.5), not here.
+
+**Capped means newest-first with a hole.** A capped recovery holds the newest 200
+missed events, not the oldest, so the buffer can contain a gap between the
+checkpoint and the recovered window. `gapFill = "capped"` reports exactly that.
 
 ### 11.4 Bounded buffer
 
@@ -487,15 +536,16 @@ are dropped (the buffer keeps the newest). Trimming happens after dedupe.
 
 | `gapFill` | UI |
 |---|---|
-| `none` | nothing (overview owner, or no events held yet) |
+| `none` | nothing — no recovery was attempted (first connect) or history is not managed (§11.1) |
 | `complete` | nothing — the buffer spans the gap |
 | `capped` | muted note: `history is partial — recovered the most recent {n} events` |
 | `failed` | muted note: `history could not be recovered` |
 
 The badge keeps reading `live` in the `capped` and `failed` rows, because the
-socket *is* live; the note carries the uncertainty. On the overview, an incomplete
-recovery is additionally repaired by the window refetch (§7.3), a second and
-larger reconciliation path (up to 600 events over the exact interval).
+socket *is* live; the note carries the uncertainty and `gapFill` carries the
+completeness. With `manageHistory: false` the hook reports `gapFill = "none"`; the
+overview surfaces its **own** `recovery` state from its window reconciliation,
+using the same vocabulary and the same wording (§7.3).
 
 `since` is derived from a **server-generated** `occurred_at`, so gap-fill is immune
 to client clock skew — unlike the initial window (§15.2).
@@ -565,21 +615,42 @@ reverted or explicitly justified.
 
 - **Jitter bounds:** every scheduled delay lies in `[base/2, base]`; capped at 30s;
   the counter resets after an open.
-- **Offset advances:** with three full pages then a short page, the requests are
-  `offset=0, 200, 400` (plus a fourth at `offset=600`); **no two requests are
-  identical** — this is the regression the old spec would have produced.
-- **Anchor:** the first recovery request's `since` is the newest held
-  `occurred_at` minus one second.
-- **Dedupe:** ids repeated across REST pages, the 1-second overlap, and live frames
+- **Exactly one recovery request:** with a full recovery page and
+  `total > BUFFER_LIMIT`, the hook issues **one** request (`offset=0`) and stops
+  with `gapFill === "capped"`, asserting no `offset=200`/`400`/`600` request is
+  made — the regression the earlier draft's offset list would have produced.
+- **Anchor is the pre-drop checkpoint:** the recovery request's `since` equals the
+  newest `occurred_at` held *before* the drop, minus one second.
+- **Critical gap scenario (regression):** hold a known event at `T0`; simulate a
+  disconnection; create missed events spanning `(T0, T1]`; reconnect and deliver
+  newer live events `L1, L2` (newer than every missed event) *during* the recovery
+  fetch. Assert all of:
+  1. `since === T0 − 1s` — the live `L` frames do **not** move the anchor. This is
+     the bug a fetch-time anchor would have had: it would have taken `L2` as the
+     anchor and skipped the entire outage.
+  2. every missed event the page can carry is present after the merge;
+  3. `L1` and `L2` are preserved;
+  4. ids repeated across the page, the 1-second overlap and the live frames appear
+     exactly once;
+  5. when the outage produced more than `BUFFER_LIMIT` missed events,
+     `gapFill === "capped"`, the §11.5 note renders, and the **newest**
+     `BUFFER_LIMIT` are the ones retained.
+- **Dedupe:** ids repeated across the page, the 1-second overlap, and live frames
   collapse to one entry; two events sharing the same `occurred_at` are both kept
   (dedupe is by id, not timestamp).
-- **Short page stops:** recovery ends on the first page shorter than the limit and
+- **Short page stops:** recovery ends on a page shorter than the limit with
   `gapFill === "complete"`.
-- **Cap:** after 3 full pages recovery stops with `gapFill === "capped"`, and the
-  note from §11.5 is rendered; the hook never claims completeness.
+- **Complete at the bound:** a full page with `total ≤ BUFFER_LIMIT` (exactly
+  `BUFFER_LIMIT` missed events) is `gapFill === "complete"`, not `"capped"` — the
+  server's `total` decides, not the page length alone.
+- **Empty page:** a reconnect with nothing missed returns zero items →
+  `gapFill === "complete"` and the buffer is unchanged.
+- **No gap on first connect:** with no checkpoint the initial fetch carries no
+  `since` and sets `gapFill === "none"`.
 - **Failure preserves state:** a rejected recovery request leaves previously held
-  events intact and sets `gapFill === "failed"`.
-- **No drop during recovery:** a live frame arriving between page 0 and page 1 is
+  events intact and sets `gapFill === "failed"`; `status` still becomes `live` when
+  the socket opens.
+- **No drop during recovery:** a live frame arriving before the fetch resolves is
   still present after the merge.
 - **Buffer cap:** the 201st insert drops the oldest; length ≤ `BUFFER_LIMIT`.
 - **Dispose:** unmounting cancels the reconnect timer, and no post-dispose
@@ -598,6 +669,10 @@ reverted or explicitly justified.
 - A **stale** response (older request id) resolving after a newer one does not
   overwrite the newer sample.
 - A recovery refetch overlapping live events produces correct KPI/chart values.
+- **Window reconciliation advances:** a large window issues `offset=0, 200, 400` —
+  **at most 3 requests, never a fourth** — and sets `recovery` to `"capped"` when
+  the third page is full, `"complete"` on a short page. This is the only path in
+  the slice that performs multi-page offset pagination (§11.3).
 - The derived input stays bounded: ≤ 600 sample + ≤ 200 live.
 
 ### Component — partial failure (Correction D)
@@ -640,9 +715,9 @@ docker compose up -d --build && docker compose ps
 **Live walkthrough.** Compose stack up → `/` serves the overview → sign in and
 land on it → a real decoy connection moves the KPIs and the chart without a
 refresh → a reconnecting badge is observable when the backend is stopped and
-recovers when it returns. Extended: stop the backend long enough to exceed the
-3-page recovery budget, restart it, and confirm the partial-recovery note appears
-while the badge returns to `live`.
+recovers when it returns. Extended: stop the backend long enough that more than
+`BUFFER_LIMIT` events are missed, restart it, and confirm the partial-recovery note
+appears while the badge returns to `live`.
 
 ## 15. Risks and documented limits
 
@@ -652,30 +727,36 @@ while the badge returns to `live`.
    live events received afterwards are added to the numerator, so the ratio can
    only *understate* the sample. It never claims completeness.
 2. **The window is computed from the browser clock** — both the request and each
-   derivation pass. A skewed client clock shifts the window. Gap-fill does not
-   share this weakness: it uses a server-generated `occurred_at`. Server-side
-   aggregation would remove it and is deferred with the endpoint.
-3. **Offset pagination can skip events under concurrent inserts.** A row can shift
-   between pages while a multi-page recovery is in flight. Duplicates are removed
-   by id-dedupe; skips cannot be, with this API. Mitigations: newest-first ordering
-   means a capped recovery keeps the newest events, and the overview's window
-   refetch is a second reconciliation path.
-4. **Bounded recovery does not guarantee completeness.** The 3-page cap bounds
-   effort; `gapFill` reports `capped`/`failed` rather than claiming success, and
-   §11.5 renders that honestly.
-5. **Aggregates go stale while the socket is down.** The badge says
-   `reconnecting`, the window refetches on recovery, and `gapFill` may report a
-   partial recovery — but there is no polling fallback.
-6. **The window advances only on a derivation pass** (a live event or a refetch).
+   derivation pass. A skewed client clock shifts the window. Recovery does not
+   share this weakness: it is anchored on a server-generated `occurred_at`.
+   Server-side aggregation would remove it and is deferred with the endpoint.
+3. **Recovery is forward-only.** It covers `(checkpoint − 1s, now]`. An event older
+   than the checkpoint that was never received before the drop — a frame lost in
+   the disconnect — is outside the scope and cannot be recovered deterministically
+   by any forward-anchored query.
+4. **Hook recovery is one page and newest-first.** It fetches at most
+   `BUFFER_LIMIT` (200) events, so a long outage is capped: the buffer keeps the
+   **newest** 200 missed events and may hold a hole between the checkpoint and the
+   recovered window. `gapFill = "capped"` states this rather than implying a
+   complete history.
+5. **The Overview's multi-page reconciliation can skip under concurrent inserts.**
+   Its page walk (`offset = 0, 200, 400`) observes three separate statements, so a
+   row can shift between them. Duplicates are removed by id-dedupe; skips are not,
+   because the API has no cursor. The hook's own recovery does not share this — it
+   is a single statement (§11.3).
+6. **Aggregates go stale while the socket is down.** The badge says `reconnecting`,
+   the window refetches on recovery, and `recovery`/`gapFill` may report a partial
+   result — but there is no polling fallback.
+7. **The window advances only on a derivation pass** (a live event or a refetch).
    With no live traffic and a healthy socket, "the last 24h" does not creep
    forward second by second; it is exact as of the last pass. A consequence of not
    polling.
-7. **Hourly resolution only**, in 24 window-anchored buckets whose first and last
+8. **Hourly resolution only**, in 24 window-anchored buckets whose first and last
    are partial wall-clock hours (§6.2). Sub-hour spikes are not representable.
-8. **The chart is not interactive** beyond a `<title>` per bar.
-9. **Fleet online/offline inherits S4's derived-at-read boundary** (45s / 3×
-   heartbeat). The overview does not make it any fresher.
-10. **`serverTotal` uses the API's inclusive `until`** while the client interval is
+9. **The chart is not interactive** beyond a `<title>` per bar.
+10. **Fleet online/offline inherits S4's derived-at-read boundary** (45s / 3×
+    heartbeat). The overview does not make it any fresher.
+11. **`serverTotal` uses the API's inclusive `until`** while the client interval is
     half-open. The discrepancy is at most the events exactly at `end` — a single
     instant — and is documented rather than papered over.
 
