@@ -9,7 +9,7 @@ const STYLES: Record<FleetStatus, string> = {
 /**
  * Fleet status is derived by the API from `last_seen_at` (`online` / `offline`)
  * or is `never` for an agent that has not reported since registration. This is
- * a different axis from `StatusBadge`, which reports the WebSocket connection.
+ * a different axis from `ConnectionBadge`, which reports the WebSocket connection.
  */
 export default function FleetStatusBadge({ status }: { status: FleetStatus }) {
   return (

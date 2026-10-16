@@ -128,10 +128,16 @@ export function useEventStream(options?: { manageHistory?: boolean }): {
   );
 
   useEffect(() => {
+    // `active` is scoped to this effect instance. `disposedRef` is reset to
+    // `false` by the next effect run, so it cannot tell a superseded socket's
+    // handlers from the current one's; `active` is set `false` by *this* run's
+    // cleanup and never flipped back, which is what stops a disposed socket's
+    // async `close` event from flipping status or re-arming a reconnect.
+    let active = true;
     disposedRef.current = false;
 
     const connect = (): void => {
-      if (disposedRef.current) return;
+      if (!active) return;
       const socket = new WebSocket(wsUrl);
       socketRef.current = socket;
 
@@ -140,9 +146,9 @@ export function useEventStream(options?: { manageHistory?: boolean }): {
         // before the handshake or any await, so a frame delivered after
         // reconnect cannot move the anchor.
         const checkpoint = checkpointRef.current;
+        if (!active) return;
         const generation = ++generationRef.current;
         retryRef.current = 0;
-        if (disposedRef.current) return;
         setStatus("live");
         // First-message handshake: credentials never appear in the URL.
         socket.send(
@@ -153,6 +159,7 @@ export function useEventStream(options?: { manageHistory?: boolean }): {
       };
 
       socket.onmessage = (ev) => {
+        if (!active) return;
         try {
           const event = JSON.parse(String(ev.data)) as AttackEvent | null;
           if (!event?.id) return;
@@ -163,7 +170,7 @@ export function useEventStream(options?: { manageHistory?: boolean }): {
       };
 
       socket.onclose = () => {
-        if (disposedRef.current) return;
+        if (!active) return;
         setStatus("reconnecting");
         retryRef.current += 1;
         // Equal jitter: the delay always lies in [base/2, base], so reconnects
@@ -173,12 +180,15 @@ export function useEventStream(options?: { manageHistory?: boolean }): {
         timerRef.current = setTimeout(connect, delay);
       };
 
-      socket.onerror = () => socket.close();
+      socket.onerror = () => {
+        if (active) socket.close();
+      };
     };
 
     connect();
 
     return () => {
+      active = false;
       disposedRef.current = true;
       generationRef.current += 1;
       if (timerRef.current !== null) {

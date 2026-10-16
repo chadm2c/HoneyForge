@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, renderHook } from "@testing-library/react";
+import { StrictMode, createElement } from "react";
+import { act, render, renderHook } from "@testing-library/react";
 import { BUFFER_LIMIT, useEventStream } from "./useEventStream";
 import type { AttackEvent } from "../api/types";
 
@@ -565,5 +566,48 @@ describe("useEventStream disposal", () => {
     await resolveNext({ items: [makeEvent("late", T0)], total: 1 });
 
     expect(errorSpy).not.toHaveBeenCalled();
+  });
+});
+
+describe("useEventStream under StrictMode", () => {
+  it("scopes the socket lifecycle to each effect instance", async () => {
+    const latest: { current: ReturnType<typeof useEventStream> | null } = {
+      current: null,
+    };
+    // `renderHook`'s wrapper does not trigger StrictMode's effect double-invoke
+    // in this environment; a plain `render` of a harness does, so use that.
+    function Harness() {
+      latest.current = useEventStream({ manageHistory: false });
+      return null;
+    }
+
+    const { unmount } = render(
+      createElement(StrictMode, null, createElement(Harness)),
+    );
+
+    // StrictMode runs effect -> cleanup -> effect on mount. The first socket is
+    // disposed during the double-invoke, leaving exactly one current socket.
+    expect(FakeWebSocket.instances).toHaveLength(2);
+    const disposed = FakeWebSocket.instances[0];
+    const current = FakeWebSocket.instances[1];
+
+    await act(async () => {
+      current.onopen?.();
+    });
+    expect(latest.current!.status).toBe("live");
+
+    // The disposed socket's close event is asynchronous, so it arrives after the
+    // second effect run. It must not flip the live status or re-arm a reconnect.
+    await act(async () => {
+      disposed.onclose?.();
+    });
+    expect(latest.current!.status).toBe("live");
+
+    await act(async () => {
+      vi.advanceTimersByTime(60_000);
+    });
+    expect(FakeWebSocket.instances).toHaveLength(2);
+
+    unmount();
   });
 });
