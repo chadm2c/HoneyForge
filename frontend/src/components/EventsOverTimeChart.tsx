@@ -5,7 +5,10 @@ import type { HourBucket, WindowDisclosure } from "../lib/stats";
 const WIDTH = 480;
 const HEIGHT = 120;
 const PAD_X = 4;
-const PLOT_TOP = 6;
+// The plot starts below a reserved annotation band so the max label can never
+// be drawn on top of a full-height bar (which tops out at `y = PLOT_TOP`).
+const PLOT_TOP = 16;
+const LABEL_Y = 10;
 const BASELINE_Y = 90;
 const PLOT_HEIGHT = BASELINE_Y - PLOT_TOP;
 const AXIS_Y = BASELINE_Y + 13;
@@ -72,7 +75,7 @@ export default function EventsOverTimeChart({
       {max > 0 && (
         <text
           x={PAD_X}
-          y={PLOT_TOP + 8}
+          y={LABEL_Y}
           textAnchor="start"
           fontSize={9}
           className="fill-slate-500"

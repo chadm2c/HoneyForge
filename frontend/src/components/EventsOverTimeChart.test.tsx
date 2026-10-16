@@ -117,6 +117,24 @@ describe("EventsOverTimeChart", () => {
     }
   });
 
+  it("keeps the max label clear of full-height bars when every bucket is equal", () => {
+    // All buckets carry the same non-zero count, so every bar is full height
+    // and bucket 0 (drawn at the same left edge as the label) reaches the very
+    // top of the plot. The label must sit in its own band above that.
+    const COUNT = 7;
+    const b = buckets(Array.from({ length: 24 }, () => COUNT));
+    const { container } = renderChart(b);
+
+    const texts = [...container.querySelectorAll("text")];
+    const maxLabel = texts.find((t) => t.textContent === String(COUNT));
+    expect(maxLabel).toBeTruthy();
+
+    const rects = [...container.querySelectorAll("rect")];
+    expect(rects).toHaveLength(24);
+    const smallestBarY = Math.min(...rects.map((r) => Number(r.getAttribute("y"))));
+    expect(Number(maxLabel!.getAttribute("y"))).toBeLessThan(smallestBarY);
+  });
+
   it("renders a flat baseline and a 'no events' label when every bucket is zero", () => {
     const b = buckets(Array.from({ length: 24 }, () => 0));
     const { container } = renderChart(b);
