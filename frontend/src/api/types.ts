@@ -55,6 +55,22 @@ export interface ProfileSummary {
 /** Derived at read time from `last_seen_at`, never a stored column. */
 export type FleetStatus = "online" | "offline" | "never";
 
+/**
+ * Reported by the dashboard's realtime WebSocket hook. `connecting` is the
+ * honest initial state — no socket has opened yet. `live` means the socket is
+ * open; `reconnecting` means it was open and has closed. This tracks the
+ * socket only, not how completely any missed history was recovered.
+ */
+export type ConnectionStatus = "connecting" | "live" | "reconnecting";
+
+/**
+ * How completely the overview backfilled events missed while the realtime
+ * socket was disconnected: `none` when nothing was missed, `complete` when the
+ * gap was fully filled, `capped` when a server limit cut the backfill short,
+ * and `failed` when the history request errored.
+ */
+export type GapFillState = "none" | "complete" | "capped" | "failed";
+
 export interface HoneypotProfileRef {
   id: string;
   name: string;
