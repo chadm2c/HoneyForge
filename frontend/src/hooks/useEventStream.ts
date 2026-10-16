@@ -1,79 +1,176 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { apiBase, apiFetch, tokenStore } from "../api/client";
-import type { AttackEvent } from "../api/types";
+import type { AttackEvent, ConnectionStatus, GapFillState } from "../api/types";
+import { mergeById } from "../lib/stats";
+
+/**
+ * The buffer keeps only the newest `BUFFER_LIMIT` events, matching the API page
+ * cap so "what we hold" agrees with "what a page can show".
+ */
+export const BUFFER_LIMIT = 200;
 
 const wsUrl = `${apiBase.replace(/^http/, "ws")}/api/ws/events`;
 
-/**
- * Live event stream: REST history on load, then a first-message-authenticated
- * WebSocket appends new events. Events are keyed by the agent-generated id, so
- * an event pushed twice (or after a reconnect history refetch) is never
- * duplicated in the list.
- */
-export function useEventStream(): { events: AttackEvent[]; connected: boolean } {
-  const [events, setEvents] = useState<AttackEvent[]>([]);
-  const [connected, setConnected] = useState(false);
-  const socketRef = useRef<WebSocket | null>(null);
-  const retryRef = useRef(0);
+interface EventPage {
+  items?: AttackEvent[];
+  total?: number;
+}
 
-  const loadHistory = useCallback(async (): Promise<void> => {
-    try {
-      const res = await apiFetch("/api/events?limit=100");
-      if (!res.ok) return;
-      const page = (await res.json()) as { items: AttackEvent[] };
-      // Merge (don't replace): a live event may have arrived while the fetch was
-      // in flight, and it must not be momentarily dropped. Dedupe by id.
-      setEvents((prev) => {
-        const byId = new Map<string, AttackEvent>();
-        for (const e of page.items ?? []) byId.set(e.id, e);
-        for (const e of prev) if (!byId.has(e.id)) byId.set(e.id, e);
-        return [...byId.values()].sort(
-          (a, b) => Date.parse(b.occurred_at) - Date.parse(a.occurred_at)
-        );
-      });
-    } catch {
-      // History fetch is best-effort; the socket keeps running and will refetch.
-    }
-  }, []);
+/**
+ * Live event stream with reconnect hardening.
+ *
+ * `status` describes the socket only ("connecting" before the first open,
+ * "live" while open, "reconnecting" after a close) and becomes `live` even when
+ * a bounded gap-fill could not retrieve everything. `gapFill` reports recovery
+ * completeness separately, so the UI cannot conflate "connected" with "we have
+ * every missed event".
+ *
+ * Recovery is anchored on the newest `occurred_at` held as of the last moment
+ * the socket was live (the checkpoint), snapshotted synchronously at the top of
+ * `onopen` so a frame delivered after reconnect cannot move the anchor. Exactly
+ * one request is issued: the buffer's newest-first ordering means page 0 already
+ * contains everything the buffer will retain.
+ *
+ * `manageHistory` defaults to `true`; the overview passes `false` because it
+ * owns its own windowed sample and must not have this hook issue overlapping
+ * REST requests.
+ */
+export function useEventStream(options?: { manageHistory?: boolean }): {
+  events: AttackEvent[];
+  status: ConnectionStatus;
+  gapFill: GapFillState;
+} {
+  const manageHistory = options?.manageHistory ?? true;
+
+  const [events, setEvents] = useState<AttackEvent[]>([]);
+  const [status, setStatus] = useState<ConnectionStatus>("connecting");
+  const [gapFill, setGapFill] = useState<GapFillState>("none");
+
+  const socketRef = useRef<WebSocket | null>(null);
+  const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const retryRef = useRef(0);
+  const checkpointRef = useRef<string | null>(null);
+  const bufferRef = useRef<AttackEvent[]>([]);
+  const disposedRef = useRef(false);
+  // Bumped per open so a recovery response belonging to a previous open cannot
+  // land after a newer open has superseded it.
+  const generationRef = useRef(0);
+
+  // The one place events combine: dedupe-by-id plus `occurred_at desc` ordering
+  // (Task 1's mergeById), then keep the newest BUFFER_LIMIT. Every write path
+  // (initial history, recovery, live frame) goes through here, so the cap and
+  // the dedupe can never diverge between paths.
+  const mergeAndCap = useCallback(
+    (prev: AttackEvent[], incoming: AttackEvent[]): AttackEvent[] =>
+      mergeById(prev, incoming).slice(0, BUFFER_LIMIT),
+    [],
+  );
+
+  const applyIncoming = useCallback(
+    (incoming: AttackEvent[]): void => {
+      const merged = mergeAndCap(bufferRef.current, incoming);
+      bufferRef.current = merged;
+      // mergeById orders `occurred_at desc`, so [0] is the newest held event.
+      checkpointRef.current = merged[0]?.occurred_at ?? checkpointRef.current;
+      if (!disposedRef.current) setEvents(merged);
+    },
+    [mergeAndCap],
+  );
+
+  const recover = useCallback(
+    async (generation: number, checkpoint: string | null): Promise<void> => {
+      try {
+        let path: string;
+        if (checkpoint === null) {
+          path = `/api/events?limit=${BUFFER_LIMIT}`;
+        } else {
+          const since = new Date(Date.parse(checkpoint) - 1000).toISOString();
+          const params = new URLSearchParams({
+            since,
+            limit: String(BUFFER_LIMIT),
+            offset: "0",
+          });
+          path = `/api/events?${params.toString()}`;
+        }
+
+        const res = await apiFetch(path);
+        if (disposedRef.current || generation !== generationRef.current) return;
+        if (!res.ok) {
+          setGapFill("failed");
+          return;
+        }
+
+        const page = (await res.json()) as EventPage;
+        if (disposedRef.current || generation !== generationRef.current) return;
+
+        const items = page.items ?? [];
+        applyIncoming(items);
+        if (checkpoint === null) {
+          // First connect, nothing was held: there is no gap to describe.
+          setGapFill("none");
+        } else {
+          const total = page.total ?? 0;
+          // A short page — or a `total` the buffer can hold entirely — means the
+          // whole missed set is here. Only a full page above the cap is partial.
+          setGapFill(
+            items.length < BUFFER_LIMIT || total <= BUFFER_LIMIT
+              ? "complete"
+              : "capped",
+          );
+        }
+      } catch {
+        if (disposedRef.current || generation !== generationRef.current) return;
+        // Keep whatever we held; report only that recovery failed.
+        setGapFill("failed");
+      }
+    },
+    [applyIncoming],
+  );
 
   useEffect(() => {
-    let disposed = false;
+    disposedRef.current = false;
 
     const connect = (): void => {
-      if (disposed) return;
+      if (disposedRef.current) return;
       const socket = new WebSocket(wsUrl);
       socketRef.current = socket;
 
       socket.onopen = () => {
+        // First statement: snapshot the pre-drop checkpoint synchronously,
+        // before the handshake or any await, so a frame delivered after
+        // reconnect cannot move the anchor.
+        const checkpoint = checkpointRef.current;
+        const generation = ++generationRef.current;
         retryRef.current = 0;
-        setConnected(true);
+        if (disposedRef.current) return;
+        setStatus("live");
         // First-message handshake: credentials never appear in the URL.
         socket.send(
           JSON.stringify({ type: "auth", token: tokenStore.get() ?? "" }),
         );
-        // Backfill on every (re)connect so a gap during downtime is covered.
-        void loadHistory();
+        if (!manageHistory) return;
+        void recover(generation, checkpoint);
       };
 
       socket.onmessage = (ev) => {
         try {
-          const event = JSON.parse(String(ev.data)) as AttackEvent;
+          const event = JSON.parse(String(ev.data)) as AttackEvent | null;
           if (!event?.id) return;
-          setEvents((prev) => {
-            if (prev.some((e) => e.id === event.id)) return prev;
-            return [event, ...prev];
-          });
+          applyIncoming([event]);
         } catch {
-          // Ignore malformed frames.
+          // Malformed frames are ignored; the stream keeps running.
         }
       };
 
       socket.onclose = () => {
-        setConnected(false);
-        if (disposed) return;
+        if (disposedRef.current) return;
+        setStatus("reconnecting");
         retryRef.current += 1;
-        const delay = Math.min(1000 * 2 ** retryRef.current, 30_000);
-        setTimeout(connect, delay);
+        // Equal jitter: the delay always lies in [base/2, base], so reconnects
+        // stay snappy while simultaneous clients spread out.
+        const base = Math.min(1000 * 2 ** retryRef.current, 30_000);
+        const delay = base / 2 + Math.random() * (base / 2);
+        timerRef.current = setTimeout(connect, delay);
       };
 
       socket.onerror = () => socket.close();
@@ -82,11 +179,16 @@ export function useEventStream(): { events: AttackEvent[]; connected: boolean } 
     connect();
 
     return () => {
-      disposed = true;
+      disposedRef.current = true;
+      generationRef.current += 1;
+      if (timerRef.current !== null) {
+        clearTimeout(timerRef.current);
+        timerRef.current = null;
+      }
       socketRef.current?.close();
       socketRef.current = null;
     };
-  }, [loadHistory]);
+  }, [manageHistory, applyIncoming, recover]);
 
-  return { events, connected };
+  return { events, status, gapFill };
 }

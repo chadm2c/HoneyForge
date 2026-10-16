@@ -72,9 +72,14 @@ it("renders history, appends ws events, and dedupes by id", async () => {
   expect(ws).toBeTruthy();
   expect(ws.url).toContain("/api/ws/events");
 
+  // The badge reports the socket's own state: no open yet means "connecting".
+  expect(screen.getByText("connecting")).toBeTruthy();
+
   // Server greets the client: auth-first handshake fires, then history loads.
   ws.onopen?.();
   expect(JSON.parse(ws.sent[0])).toMatchObject({ type: "auth" });
+  // The socket is now open, so the badge reads "live".
+  expect(await screen.findByText("live")).toBeTruthy();
 
   await screen.findByText("192.0.2.1");
   expect(screen.getByText("192.0.2.2")).toBeTruthy();

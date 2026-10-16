@@ -1,8 +1,8 @@
 import { useEventStream } from "../hooks/useEventStream";
-import StatusBadge from "./StatusBadge";
+import ConnectionBadge from "./ConnectionBadge";
 
 export default function EventFeed() {
-  const { events, connected } = useEventStream();
+  const { events, status, gapFill } = useEventStream();
 
   return (
     <section>
@@ -10,7 +10,21 @@ export default function EventFeed() {
         <h2 className="text-sm font-semibold tracking-wide text-cyan-300">
           Live event feed
         </h2>
-        <StatusBadge connected={connected} />
+        <div className="flex items-center gap-3">
+          {/* Recovery completeness is a separate axis from the socket status:
+              the badge stays "live", and this muted note carries the gap. */}
+          {gapFill === "capped" && (
+            <span className="text-xs text-slate-500">
+              history is partial — recovered the most recent {events.length} events
+            </span>
+          )}
+          {gapFill === "failed" && (
+            <span className="text-xs text-slate-500">
+              history could not be recovered
+            </span>
+          )}
+          <ConnectionBadge status={status} />
+        </div>
       </div>
       {events.length === 0 ? (
         <p className="mt-3 text-sm text-slate-500">No events yet…</p>
