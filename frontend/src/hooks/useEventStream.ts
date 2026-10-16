@@ -174,8 +174,10 @@ export function useEventStream(options?: { manageHistory?: boolean }): {
         setStatus("reconnecting");
         retryRef.current += 1;
         // Equal jitter: the delay always lies in [base/2, base], so reconnects
-        // stay snappy while simultaneous clients spread out.
-        const base = Math.min(1000 * 2 ** retryRef.current, 30_000);
+        // stay snappy while simultaneous clients spread out. `retryRef` was just
+        // incremented to the 1-based attempt n, so the exponent is `n - 1`
+        // (§11.2): attempt 1 -> base 1000, not 2000.
+        const base = Math.min(1000 * 2 ** (retryRef.current - 1), 30_000);
         const delay = base / 2 + Math.random() * (base / 2);
         timerRef.current = setTimeout(connect, delay);
       };

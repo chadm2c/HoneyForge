@@ -580,9 +580,10 @@ Adopted by **all five existing pages** plus the overview — that adoption is wh
 makes this a consistency pass rather than a new page that matches nothing.
 
 **Hard guardrail:** rendered text and ARIA roles must not change. The existing 34
-tests are the check; the only permitted test edits are the three touch points in
-§5 and §12. If another test moves, the change is behavioural and must be
-reverted or explicitly justified.
+tests are the check; the only permitted test edits are the four touch points in
+§5, §10 and §12 — the fourth being `EventsPage.test.tsx`, whose disclosure-toggle
+selectors §10 requires be kept working. If another test moves, the change is
+behavioural and must be reverted or explicitly justified.
 
 ## 14. Testing plan
 
@@ -693,7 +694,8 @@ reverted or explicitly justified.
   appears when the sample is capped; **a pushed live event increments the count
   with no refresh** (the Phase 4 exit criteria, as a test).
 - `EventsOverTimeChart`: 24 bars; the `max === 0` case; the `aria-label` contains
-  the disclosure text; no axis label claims `HH:00`.
+  the disclosure text; no axis label claims `HH:00`; the y-axis maximum (§9)
+  renders as text when `max > 0` and is absent when `max === 0`.
 - `EventDetail`: renders both timestamps distinctly; `details` as key/values.
 - `HoneypotDetail`: drift shown when `config_version < profile.version`, absent
   when equal; error state when the fetch fails.

@@ -182,12 +182,14 @@ describe("useEventStream backoff", () => {
     }
 
     for (let attempt = 1; attempt <= 6; attempt++) {
-      const base = Math.min(1000 * 2 ** attempt, 30_000);
+      // Spec §11.2: attempt n (1-based) -> base = min(1000 * 2^(n-1), 30_000).
+      const base = Math.min(1000 * 2 ** (attempt - 1), 30_000);
       const delay = delays[attempt - 1];
       expect(delay).toBeGreaterThanOrEqual(base / 2);
       expect(delay).toBeLessThanOrEqual(base);
     }
-    // The cap: the sixth attempt's base is 30s and its delay cannot exceed it.
+    // The cap: by the sixth attempt the uncapped base (32s) exceeds 30s, so the
+    // delay is capped there and cannot exceed it.
     expect(delays[5]).toBeLessThanOrEqual(30_000);
   });
 
@@ -196,19 +198,19 @@ describe("useEventStream backoff", () => {
     const spy = vi.spyOn(globalThis, "setTimeout");
     renderHook(() => useEventStream({ manageHistory: false }));
 
-    await close(0); // attempt 1: base 2000
-    expect(spy.mock.calls[spy.mock.calls.length - 1][1]).toBe(1000); // exactly base/2
+    await close(0); // attempt 1: base 1000 (§11.2)
+    expect(spy.mock.calls[spy.mock.calls.length - 1][1]).toBe(500); // exactly base/2
 
     await act(async () => {
-      vi.advanceTimersByTime(1_000);
+      vi.advanceTimersByTime(500);
     });
     await open(1); // reset the attempt counter
 
     random.mockReturnValue(0.999999);
-    await close(1); // attempt 1 again: base 2000
+    await close(1); // attempt 1 again: base 1000
     const upper = spy.mock.calls[spy.mock.calls.length - 1][1] as number;
-    expect(upper).toBeGreaterThan(1_000);
-    expect(upper).toBeLessThan(2_000); // just below base
+    expect(upper).toBeGreaterThan(500);
+    expect(upper).toBeLessThan(1_000); // just below base
   });
 
   it("resets the attempt counter after a successful open", async () => {
@@ -224,12 +226,12 @@ describe("useEventStream backoff", () => {
     await close(1);
     const second = spy.mock.calls[spy.mock.calls.length - 1][1] as number;
 
-    // Both are attempt 1: base = 2000, so both lie in [1000, 2000], not the
-    // [2000, 4000] a stale counter would produce.
-    expect(first).toBeGreaterThanOrEqual(1000);
-    expect(first).toBeLessThanOrEqual(2_000);
-    expect(second).toBeGreaterThanOrEqual(1000);
-    expect(second).toBeLessThanOrEqual(2_000);
+    // Both are attempt 1: base = 1000 (§11.2), so both lie in [500, 1000], not
+    // the [1000, 2000] a stale counter would produce.
+    expect(first).toBeGreaterThanOrEqual(500);
+    expect(first).toBeLessThanOrEqual(1_000);
+    expect(second).toBeGreaterThanOrEqual(500);
+    expect(second).toBeLessThanOrEqual(1_000);
   });
 });
 

@@ -38,7 +38,11 @@ export default function LoginPage() {
 
   return (
     <div className="flex min-h-screen items-center justify-center bg-slate-950 px-4 text-slate-200">
-      <Panel className="w-full max-w-sm p-6">
+      {/* No `p-*` here: `Panel` already owns its `p-4`. Setting a second
+          padding class (previously `p-6`) left the winner to Tailwind's
+          generated rule order rather than the class string — deterministic
+          now, and consistent with the other pages' Panel spacing. */}
+      <Panel className="w-full max-w-sm">
         <form onSubmit={onSubmit}>
           <h1 className="text-xl font-semibold tracking-wide text-cyan-400">
             HoneyForge

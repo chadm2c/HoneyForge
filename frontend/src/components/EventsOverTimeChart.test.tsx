@@ -97,6 +97,26 @@ describe("EventsOverTimeChart", () => {
     expect(container.textContent).not.toContain("2026-10-15 12:00 UTC");
   });
 
+  it("labels the y-axis with the max bucket count when the window is non-empty", () => {
+    // 43 is deliberately non-round: no default or hardcoded label can satisfy it.
+    const b = buckets(Array.from({ length: 24 }, (_, i) => (i === 7 ? 43 : i + 1)));
+    const { container } = renderChart(b);
+
+    const texts = [...container.querySelectorAll("text")];
+    const maxLabel = texts.find((t) => t.textContent === "43");
+    expect(maxLabel).toBeTruthy();
+    expect(screen.getByText("43")).toBeTruthy();
+
+    // Kept in the top-left of the plot, above the x-axis labels at the bottom,
+    // so the two can never collide.
+    const yOf = (t: Element) => Number(t.getAttribute("y"));
+    const axisLabels = texts.filter((t) => (t.textContent ?? "").endsWith("UTC"));
+    expect(axisLabels.length).toBeGreaterThan(0);
+    for (const axis of axisLabels) {
+      expect(yOf(maxLabel!)).toBeLessThan(yOf(axis));
+    }
+  });
+
   it("renders a flat baseline and a 'no events' label when every bucket is zero", () => {
     const b = buckets(Array.from({ length: 24 }, () => 0));
     const { container } = renderChart(b);
@@ -105,6 +125,10 @@ describe("EventsOverTimeChart", () => {
     const baseline = container.querySelector("line");
     expect(baseline).toBeTruthy();
     expect(screen.getByText(/no events/i)).toBeTruthy();
+
+    // With no events there is no y-axis maximum to label: the "no events" text
+    // carries the meaning alone, and no stray "0" label is rendered.
+    expect(screen.queryByText("0")).toBeNull();
 
     // One bar per bucket survives, each zero-height rather than NaN.
     const rects = [...container.querySelectorAll("rect")];

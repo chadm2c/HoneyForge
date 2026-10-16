@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import EventFeed from "./EventFeed";
+import { BUFFER_LIMIT } from "../hooks/useEventStream";
 import type { AttackEvent } from "../api/types";
 
 /**
@@ -44,6 +45,18 @@ function makeEvent(id: string, ip: string, eventType = "connection"): AttackEven
     occurred_at: "2026-01-01T12:00:00Z",
     received_at: "2026-01-01T12:00:01Z",
   };
+}
+
+/**
+ * Drop the current socket and drive the hook's own jittered reconnect (at
+ * attempt 1 the delay is at most 1s, so a real-timer `waitFor` covers it).
+ */
+async function dropAndReopen(): Promise<void> {
+  FakeWebSocket.instances[FakeWebSocket.instances.length - 1].onclose?.();
+  await waitFor(() => expect(FakeWebSocket.instances).toHaveLength(2), {
+    timeout: 3000,
+  });
+  FakeWebSocket.instances[1].onopen?.();
 }
 
 beforeEach(() => {
@@ -92,4 +105,68 @@ it("renders history, appends ws events, and dedupes by id", async () => {
 
   const rows = screen.getAllByRole("listitem");
   expect(rows).toHaveLength(3); // h1, h2 from history + h3, duplicate ignored
+});
+
+it("renders the capped gap-fill note beside a still-live badge", async () => {
+  const history = [makeEvent("h1", "192.0.2.1")];
+  // A full page (exactly BUFFER_LIMIT) whose total exceeds the cap is the
+  // precise §11.3 condition that yields "capped".
+  const fullPage = Array.from({ length: BUFFER_LIMIT }, (_, i) =>
+    makeEvent(`m${i}`, "192.0.2.1", "scan")
+  );
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: history, total: 1 }),
+      } as Response)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: fullPage, total: BUFFER_LIMIT + 50 }),
+      } as Response)
+  );
+
+  render(<EventFeed />);
+  const first = FakeWebSocket.instances[0];
+  first.onopen?.();
+  expect(await screen.findByText("live")).toBeTruthy();
+  await screen.findByText("192.0.2.1");
+
+  await dropAndReopen();
+
+  expect(
+    await screen.findByText(
+      `history is partial — recovered the most recent ${BUFFER_LIMIT} events`
+    )
+  ).toBeTruthy();
+  // Recovery completeness is a separate axis: the socket is still live.
+  expect(screen.getByText("live")).toBeTruthy();
+});
+
+it("renders the failed gap-fill note beside a still-live badge, with no alert", async () => {
+  const history = [makeEvent("h1", "192.0.2.1")];
+  vi.stubGlobal(
+    "fetch",
+    vi
+      .fn()
+      .mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ items: history, total: 1 }),
+      } as Response)
+      .mockRejectedValueOnce(new Error("network down"))
+  );
+
+  render(<EventFeed />);
+  const first = FakeWebSocket.instances[0];
+  first.onopen?.();
+  expect(await screen.findByText("live")).toBeTruthy();
+  await screen.findByText("192.0.2.1");
+
+  await dropAndReopen();
+
+  expect(await screen.findByText("history could not be recovered")).toBeTruthy();
+  expect(screen.getByText("live")).toBeTruthy();
+  expect(screen.queryByRole("alert")).toBeNull();
 });

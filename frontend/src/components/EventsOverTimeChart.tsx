@@ -66,6 +66,21 @@ export default function EventsOverTimeChart({
       {/* The baseline is always drawn, so an all-zero window reads as flat. */}
       <line x1={PAD_X} y1={BASELINE_Y} x2={WIDTH - PAD_X} y2={BASELINE_Y} className="stroke-slate-700" />
 
+      {/* §9: the y-axis carries the max value. Only when the window is
+          non-empty — with `max === 0` the "No events" label below already
+          states the meaning, and two labels would stack at the same point. */}
+      {max > 0 && (
+        <text
+          x={PAD_X}
+          y={PLOT_TOP + 8}
+          textAnchor="start"
+          fontSize={9}
+          className="fill-slate-500"
+        >
+          {max}
+        </text>
+      )}
+
       {max === 0 && (
         <text
           x={WIDTH / 2}
