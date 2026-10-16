@@ -1,5 +1,6 @@
 import { afterEach, expect, it, vi } from "vitest";
 import { fireEvent, screen } from "@testing-library/react";
+import { Route, Routes } from "react-router-dom";
 import LoginPage from "./LoginPage";
 import { jsonResponse, renderWithProviders } from "../test/utils";
 
@@ -34,4 +35,35 @@ it("posts credentials and stores the returned token", async () => {
   await vi.waitFor(() =>
     expect(localStorage.getItem("hf_token")).toBe("new-jwt"),
   );
+});
+
+it("lands on the overview after a successful sign-in", async () => {
+  localStorage.clear();
+  const fetchImpl = async (url: string) =>
+    String(url).endsWith("/api/auth/login")
+      ? jsonResponse({
+          access_token: "new-jwt",
+          token_type: "bearer",
+          expires_in: 3600,
+          operator: { id: "1", username: "admin", role: "admin" },
+        })
+      : jsonResponse({ items: [], total: 0 });
+
+  renderWithProviders(
+    <Routes>
+      <Route path="/login" element={<LoginPage />} />
+      <Route path="/" element={<div>overview-stub</div>} />
+    </Routes>,
+    { route: "/login", fetchImpl },
+  );
+
+  fireEvent.change(screen.getByLabelText(/username/i), {
+    target: { value: "admin" },
+  });
+  fireEvent.change(screen.getByLabelText(/password/i), {
+    target: { value: "secret" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: /sign in/i }));
+
+  expect(await screen.findByText("overview-stub")).toBeTruthy();
 });

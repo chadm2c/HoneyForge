@@ -1,7 +1,10 @@
 import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
-const NAV = [
+const NAV: { to: string; label: string; end?: boolean }[] = [
+  // `end` is required for "/": without it React Router marks the link current on
+  // every route, so Overview would read active on the Fleet/Profiles/… pages too.
+  { to: "/", label: "Overview", end: true },
   { to: "/fleet", label: "Fleet" },
   { to: "/profiles", label: "Profiles" },
   { to: "/events", label: "Events" },
@@ -40,17 +43,18 @@ export default function AppShell() {
           )}
         </div>
         <nav className="mt-4 flex gap-5 text-sm">
-          {NAV.map((item) => (
+          {NAV.map(({ to, label, end }) => (
             <NavLink
-              key={item.to}
-              to={item.to}
+              key={to}
+              to={to}
+              end={end}
               className={({ isActive }) =>
                 isActive
                   ? "font-medium text-cyan-300"
                   : "text-slate-400 hover:text-slate-200"
               }
             >
-              {item.label}
+              {label}
             </NavLink>
           ))}
         </nav>

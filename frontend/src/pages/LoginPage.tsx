@@ -25,7 +25,7 @@ export default function LoginPage() {
     try {
       await login(username, password);
       // Success hands off to the shell; busy stays set until unmount.
-      navigate("/fleet", { replace: true });
+      navigate("/", { replace: true });
     } catch (err) {
       setError(
         err instanceof ApiError && err.status === 401

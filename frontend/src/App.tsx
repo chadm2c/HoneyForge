@@ -6,6 +6,7 @@ import AuditPage from "./pages/AuditPage";
 import EventsPage from "./pages/EventsPage";
 import FleetPage from "./pages/FleetPage";
 import LoginPage from "./pages/LoginPage";
+import OverviewPage from "./pages/OverviewPage";
 import ProfilesPage from "./pages/ProfilesPage";
 
 export default function App() {
@@ -20,12 +21,13 @@ export default function App() {
             </RequireAuth>
           }
         >
+          <Route path="" element={<OverviewPage />} />
           <Route path="fleet" element={<FleetPage />} />
           <Route path="profiles" element={<ProfilesPage />} />
           <Route path="events" element={<EventsPage />} />
           <Route path="audit" element={<AuditPage />} />
         </Route>
-        <Route path="*" element={<Navigate to="/fleet" replace />} />
+        <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </AuthProvider>
   );
