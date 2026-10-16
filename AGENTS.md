@@ -274,14 +274,18 @@ discussion — they are choices, not oversights.
 
 ## 11. Current focus
 
-- **Slice:** S4 complete — the control-center API **and** its minimal UI
-  together: bcrypt + JWT operator auth with `admin`/`analyst` roles, profile CRUD
-  with version bump and an in-use delete guard, operator-provisioned honeypot
-  registration with a one-time agent token and derived fleet status, event
-  filters/pagination/`q` search, audit logs, and the five React pages that drive
-  them (login, fleet, profiles, events, audit). `DEV_OPERATOR_TOKEN` is fully
-  retired; no schema migration was needed (all five tables already existed).
-- **Next:** S5 — dashboard experience: overview, charts, event detail views,
-  WebSocket reconnect + history gap-fill, theme polish.
+- **Slice:** S5 complete — dashboard experience. The Overview at `/` (fleet KPIs,
+  a 24h event window, the hand-rolled inline SVG events-per-hour chart, top event
+  types/ports, and a window-completeness disclosure); structured event and
+  honeypot detail panels replacing the raw JSON dump; WebSocket reconnect
+  hardening (pre-drop checkpoint recovery, equal jitter with a 30s cap, a
+  bounded 200-event buffer, a tri-state connection badge, and a bounded window
+  reconciliation that reports `complete`/`capped`/`failed` on its own axis);
+  shared UI primitives adopted across the five pages; and a theme consistency
+  pass. Client-side only — no backend endpoint, schema, migration or dependency
+  change.
+- **Next:** S6 — reliability & security: buffer/retry under forced outage, DB
+  persistence through restart, rate limits/payload caps, expanded tests,
+  Nginx + TLS if time, encryption matrix.
 - **Remaining before submission:** TLS/encryption matrix, README + architecture
   and DB diagrams, API docs, seed data, final demo recording.

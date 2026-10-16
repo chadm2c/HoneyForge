@@ -211,7 +211,7 @@ export interface Overview {
   fetch filter at fetch time; once live events have arrived it can only
   *understate* the window total, so the "most recent N of M" wording never
   over-claims completeness (§15.1).
-- `deriveOverview({ sample, live, window, honeypots }): Overview` — the **only**
+- `deriveOverview({ sample, live, window, honeypots, serverTotal }): Overview` — the **only**
   entry point the page uses: merge (`mergeById`), partition once, then compute
   every aggregate from that single partition. The page and the chart cannot
   disagree because they read the same `Overview`.
@@ -252,7 +252,8 @@ for the same view. The overview takes live updates only from the hook.
 
 ### 7.2 Fetch plan
 
-1. `GET /api/honeypots` — once per pass.
+1. `GET /api/honeypots` — once, on mount — the recovery refetch re-reads only the
+   window, §7.3.
 2. `GET /api/events?since=<start>&until=<end>&limit=<PAGE_SIZE>&offset=…` — paged by
    advancing `offset`, stopping early when a page returns fewer than `PAGE_SIZE`
    items or the running count reaches `total`.
