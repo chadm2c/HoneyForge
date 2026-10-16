@@ -100,3 +100,30 @@ it("reveals the agent token exactly once after an admin registers", async () => 
   expect(await screen.findByText("tok-123")).toBeTruthy();
   expect(screen.getByText(/will not be shown again/i)).toBeTruthy();
 });
+
+it("fetches a honeypot's detail and flags config drift when expanded", async () => {
+  const urls: string[] = [];
+  renderWithProviders(<FleetPage />, {
+    route: "/fleet",
+    fetchImpl: async (url) => {
+      const target = String(url);
+      urls.push(target);
+      // The detail endpoint is the list path plus the id; check it before the
+      // list path, which is a prefix of it.
+      if (target.includes(`/api/honeypots/${HP.id}`)) {
+        // The agent is running v1 while the profile is already at v2.
+        return jsonResponse({ ...HP, config_version: 1 });
+      }
+      if (target.includes("/api/honeypots")) return jsonResponse([HP]);
+      if (target.includes("/api/profiles")) return jsonResponse([PROFILE]);
+      return jsonResponse({ items: [], total: 0 });
+    },
+  });
+
+  fireEvent.click(await screen.findByRole("button", { name: /details/i }));
+
+  expect(
+    await screen.findByText("Config outdated (agent v1 of v2)"),
+  ).toBeTruthy();
+  expect(urls.some((u) => u.endsWith(`/api/honeypots/${HP.id}`))).toBe(true);
+});

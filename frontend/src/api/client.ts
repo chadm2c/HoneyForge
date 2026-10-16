@@ -152,6 +152,10 @@ export function listHoneypots(): Promise<Honeypot[]> {
   return apiJson<Honeypot[]>("/api/honeypots");
 }
 
+export function getHoneypot(id: string): Promise<Honeypot> {
+  return apiJson<Honeypot>(`/api/honeypots/${id}`);
+}
+
 export function registerHoneypot(input: {
   name: string;
   profile_id: string;

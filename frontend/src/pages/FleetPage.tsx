@@ -1,9 +1,10 @@
-import { useCallback, useEffect, useState } from "react";
+import { Fragment, useCallback, useEffect, useState } from "react";
 import type { FormEvent } from "react";
 import { listHoneypots, listProfiles, registerHoneypot } from "../api/client";
 import type { Honeypot, HoneypotRegistered, ProfileSummary } from "../api/types";
 import { useAuth } from "../auth/AuthContext";
 import FleetStatusBadge from "../components/FleetStatusBadge";
+import HoneypotDetail from "../components/HoneypotDetail";
 import Button from "../components/ui/Button";
 import EmptyState from "../components/ui/EmptyState";
 import ErrorState from "../components/ui/ErrorState";
@@ -31,6 +32,7 @@ export default function FleetPage() {
   const [profileId, setProfileId] = useState("");
   const [busy, setBusy] = useState(false);
   const [registered, setRegistered] = useState<HoneypotRegistered | null>(null);
+  const [selected, setSelected] = useState<string | null>(null);
 
   const load = useCallback(async () => {
     try {
@@ -107,28 +109,49 @@ export default function FleetPage() {
                 <Th>Last seen</Th>
                 <Th>Profile</Th>
                 <Th>Config</Th>
+                <Th />
               </tr>
             </thead>
             <tbody>
               {honeypots.map((hp) => (
-                <tr key={hp.id}>
-                  <Td className="font-medium text-slate-200">{hp.name}</Td>
-                  <Td className="text-slate-400">
-                    {hp.profile.interaction_level}
-                  </Td>
-                  <Td>
-                    <FleetStatusBadge status={hp.status} />
-                  </Td>
-                  <Td className="font-mono text-xs text-slate-400">
-                    {lastSeen(hp.last_seen_at)}
-                  </Td>
-                  <Td className="text-slate-400">
-                    {hp.profile.name} v{hp.profile.version}
-                  </Td>
-                  <Td className="font-mono text-xs text-slate-400">
-                    {hp.config_version}
-                  </Td>
-                </tr>
+                <Fragment key={hp.id}>
+                  <tr>
+                    <Td className="font-medium text-slate-200">{hp.name}</Td>
+                    <Td className="text-slate-400">
+                      {hp.profile.interaction_level}
+                    </Td>
+                    <Td>
+                      <FleetStatusBadge status={hp.status} />
+                    </Td>
+                    <Td className="font-mono text-xs text-slate-400">
+                      {lastSeen(hp.last_seen_at)}
+                    </Td>
+                    <Td className="text-slate-400">
+                      {hp.profile.name} v{hp.profile.version}
+                    </Td>
+                    <Td className="font-mono text-xs text-slate-400">
+                      {hp.config_version}
+                    </Td>
+                    <Td className="text-right">
+                      <Button
+                        type="button"
+                        variant="secondary"
+                        onClick={() =>
+                          setSelected(selected === hp.id ? null : hp.id)
+                        }
+                      >
+                        {selected === hp.id ? "Hide" : "Details"}
+                      </Button>
+                    </Td>
+                  </tr>
+                  {selected === hp.id && (
+                    <tr>
+                      <Td colSpan={7} className="bg-slate-900/40">
+                        <HoneypotDetail honeypotId={hp.id} />
+                      </Td>
+                    </tr>
+                  )}
+                </Fragment>
               ))}
             </tbody>
           </Table>
