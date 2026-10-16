@@ -2,8 +2,8 @@ import { NavLink, Outlet } from "react-router-dom";
 import { useAuth } from "../auth/AuthContext";
 
 const NAV: { to: string; label: string; end?: boolean }[] = [
-  // `end` is required for "/": without it React Router marks the link current on
-  // every route, so Overview would read active on the Fleet/Profiles/… pages too.
+  // `end` is redundant for "/" in this router version (it already matches only
+  // at the exact root) but is kept to make that root match explicit.
   { to: "/", label: "Overview", end: true },
   { to: "/fleet", label: "Fleet" },
   { to: "/profiles", label: "Profiles" },

@@ -70,9 +70,17 @@ export default function OverviewPage() {
             </span>
           )}
         </div>
-        {/* Rendered verbatim from the derivation; never recomposed here. */}
-        {overview && (
-          <p className="text-xs text-slate-500">{overview.disclosure.text}</p>
+        {/* The disclosure is governed by the events request (§7.5): loading is a
+            placeholder and a failure is an error, never a silent absence. */}
+        {eventsLoading ? (
+          <LoadingText />
+        ) : eventsError ? (
+          <ErrorState>{eventsError}</ErrorState>
+        ) : (
+          // Rendered verbatim from the derivation; never recomposed here.
+          overview && (
+            <p className="text-xs text-slate-500">{overview.disclosure.text}</p>
+          )
         )}
       </div>
 

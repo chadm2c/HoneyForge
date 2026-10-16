@@ -306,8 +306,9 @@ describe("OverviewPage partial failure", () => {
       ).toBeTruthy(),
     );
     expect(within(panel("Fleet")).getByText("3")).toBeTruthy();
-    // Each of the five events-governed blocks carries the error independently.
-    expect(screen.getAllByText("Could not load events.")).toHaveLength(5);
+    // Each of the five events-governed blocks carries the error independently,
+    // plus the disclosure line: six events-error states in all.
+    expect(screen.getAllByText("Could not load events.")).toHaveLength(6);
     // No block turned a failed request into a misleading zero.
     expect(screen.queryByText("0")).toBeNull();
   });
@@ -333,6 +334,13 @@ describe("OverviewPage partial failure", () => {
     });
 
     expect((await screen.findAllByText("Loading…")).length).toBeGreaterThan(0);
+
+    // The disclosure slot renders a placeholder rather than nothing: it sits
+    // beside the always-present badge, in the same top row.
+    const badge = screen.getByText("connecting");
+    const topRow = badge.parentElement?.parentElement as HTMLElement;
+    expect(within(topRow).getByText("Loading…")).toBeTruthy();
+
     expect(screen.queryByText("0")).toBeNull();
     expect(screen.queryByRole("alert")).toBeNull();
   });

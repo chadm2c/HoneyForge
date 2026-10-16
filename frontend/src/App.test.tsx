@@ -62,8 +62,9 @@ it("renders the shell nav for a signed-in operator", async () => {
   expect(screen.getByRole("link", { name: "Audit" })).toBeTruthy();
   expect(screen.getByRole("link", { name: "Overview" })).toBeTruthy();
 
-  // `/` carries `end`, so it is *not* current on a sibling route. Without it,
-  // React Router marks the Overview link active on every page.
+  // The root link is not current on a sibling route. `end` is redundant for "/"
+  // in this router version but makes the exact-root match explicit; this pins
+  // the invariant regardless.
   expect(screen.getByRole("link", { name: "Fleet" }).getAttribute("aria-current")).toBe(
     "page",
   );
